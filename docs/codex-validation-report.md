@@ -2,7 +2,7 @@
 
 ## Validation Status
 
-**LATEST STATUS: VALIDATION PASSED WITH WARNINGS — DEMO READY（Round 2）**
+**LATEST STATUS: VALIDATION FAILED（Round 3）**
 
 > 第一轮历史结论为 `VALIDATION FAILED`；当前有效结论见文末 `Round 2 Revalidation`，绑定 Commit `313fb8a108fe271e1206ca7dacbe2bff8bc63f46`。
 
@@ -208,3 +208,70 @@
 **VALIDATION PASSED WITH WARNINGS — DEMO READY**
 
 依据：40 项 pytest、Demo、前端构建、COD-V-001～006、核心 E2E、What-if Isolation、Agent Grounding、真实广州 AMap、Secret Scan 与 Synthetic Data 均通过；无 P0、无未解决 P1。仅剩 ECharts chunk-size P3 警告。
+
+---
+
+## Round 3 — CV & Display Name Validation
+
+### Bound Git Baseline
+
+- Git Commit：`35a624e4cf0ffcd06c91643f74624c2d9855566d`
+- 验证开始时 `git rev-parse HEAD` 精确匹配，工作区干净；验证期间未修改业务代码。
+- `docs/codex-validation-report.md` 相对上一基线的差异判定为 **A 类**：提交了上一轮 Codex 已生成的 Round 2 报告内容，未发现 ZCode 重写或美化本轮结论的证据。
+- 本节由 Codex 独立追加；最终工作区只允许本报告产生变更。
+
+### Automated Regression
+
+| 项目 | 结果 | 实测证据 |
+|---|---|---|
+| pytest | **PASS** | `56 passed in 1.86s`，无 skip/xfail |
+| demo_test | **PASS** | `DEMO READY` |
+| npm test | **PASS** | 2 files，`10 passed` |
+| npm build | **PASS WITH P3 WARNING** | 638 modules；构建成功；`riskChartEngine` 507.96 kB chunk warning |
+| Test Integrity | **PASS** | 相对基线新增后端 16 项、前端 10 项相关测试；未发现删除旧测试、降低断言、`.only`、skip 或 xfail |
+
+### Validation Matrix
+
+| 验证项 | 结果 | 独立证据 |
+|---|---|---|
+| Validation Report Integrity | **PASS** | 判定为 A 类历史报告入库；本轮未依赖 Commit 内既有结论 |
+| Display Name API | **PASS** | World State 返回 80 个 Agent；`agent_A=模拟人员001`、第 20 个 `agent_T=模拟人员020`、`agent_50=模拟人员050`、`agent_80=模拟人员080`；80/80 `synthetic=true` |
+| ID Stability | **PASS** | World State 字典键与 Agent.id 80/80 相等；源码中 display_name 仅用于展示/模拟元数据，Event、Relation、Simulation、Agent Tools 与 SQLite subject 均继续使用 Agent ID |
+| Chinese Labels | **PASS** | low/medium/high 与 7 个 behavior_state 均映射为中文；未知值安全回退原值；未错误要求 Agent 枚举存在 critical |
+| AMap InfoWindow | **PASS — ONLINE VERIFIED** | 真实广州高德在线，80 Marker；指定 001/020/050/080 均存在。agent_50 显示中文字段、Agent ID、实际坐标与风险值，不含 `risk_level/risk_score/behavior_state/position` 旧字段名 |
+| Latest State Behavior | **PASS** | agent_50 首次显示 28.8；CV 后 Marker 重建并写入最新 extData，再次点击显示 75.0；调用链包含 getExtData → formatter → setContent/open |
+| Formatter / HTML Escape | **PASS** | Agent InfoWindow 统一经过 `buildAgentInfoWindowContent()`；运行时注入 `<测试>&\"'` 展示名后未生成 script 或注入标签，特殊字符按文本显示 |
+| Vite Runtime Consistency | **PASS** | `5173` 实际返回的 infoWindow/overlays/CV 模块均包含新版 formatter、get/setExtData、runningRef 与 sceneId API 调用；浏览器实际显示中文模板和新版 CV UI，无旧 transform cache |
+| Detection Schema | **FAIL — P2** | confidence 越界会拒绝；预置四场景 bbox 均在画面内。但 BBox 模型会接受 `x=.9,width=.2` 或 `y=.9,height=.2`，缺少 `x+width<=1`、`y+height<=1` 跨字段校验 |
+| Four CV Scenes | **PASS** | 浏览器逐一运行：normal=1 Detection/PersonDetected；crowd=4/含 CrowdDetected；risk_object=2/含 RiskObjectDetected；high_risk=5/Person×3+CrowdDetected+RiskObjectDetected；scene_id 与 UI 选择一致 |
+| Crowd Layering | **PASS** | MockCVProvider 所有入口只产生 CrowdDetected 感知事实，不产生 CrowdGathered；空间/行为层 CrowdGathered 链路保持独立 |
+| CV Event Flow | **PASS** | UI POST → Provider → Detection → Standard Event → world_service.publish → Event Bus → World State/Risk；源码和 Provider 黑盒均证明 CV 不直接修改 risk_score |
+| Risk Update | **PASS** | Reset 后 `28.8→75.0`；contributors 为 CrowdDetected 9.1、RiskObjectDetected 31.15、高风险倍率 9.79，属于后端规则计算而非前端固定赋值 |
+| Alert Deduplication | **PASS** | high_risk 产生 1 个 AlertTriggered；继续发布非关键 PersonDetected 后 Alert 数仍为 1，无递归事件风暴 |
+| SQLite Audit | **PASS** | mock_cv 记录具备 event_id/type/subject_id/source/confidence/timestamp/payload；payload 含 scene_id/detection_id/label/bbox；subject 均为 agent_* ID |
+| CV UI / Animation | **PARTIAL — P1** | 1920×1080 下初态、四场景、扫描线、Detection Box、Label、Confidence 与完成状态均可见；最终框使用后端 Detection bbox。**1366×768 下 CV Panel 高度仅约 2px，被 `.panel{overflow:hidden}` 裁掉，开始识别入口不可访问** |
+| Duplicate Submission | **PASS** | 浏览器快速双击 high_risk 后 SQLite mock_cv 记录仅增加 5 条，等于一次场景事件数；runningRef 实际有效 |
+| Timeline | **PASS** | high_risk 后真实 Timeline 显示 PersonDetected×3、CrowdDetected、RiskObjectDetected、AlertTriggered，数据来自后端 World State |
+| AMap Event Marker | **PARTIAL — P2** | CrowdDetected 与 RiskObjectDetected Marker 均实际存在；但两者同位置完全重叠，点击 CrowdDetected Marker 实际打开 RiskObjectDetected InfoWindow，无法可靠检查/访问 Crowd Marker 信息 |
+| Agent Grounding | **PASS** | Reset 前回答“无活跃事件”；CV 后仅引用真实 CrowdDetected、RiskObjectDetected、AlertTriggered/contributors，tools_used 为 get_risk_analysis/get_active_events，无 CrowdGathered 幻觉 |
+| Prediction | **PASS** | 10min Prediction 从 26.8/低风险基线变化为 82.0（单次 high_risk）；浏览器高风险累积状态亦得到不同预测，模型为 transparent_rule_probability_v1 |
+| What-if | **PASS** | none/warn/guide_leave/intervene 结果有差异；浏览器 WARN 显示 100→68；运行前后 World State SHA-256 与实时风险完全相同 |
+| Reset | **FAIL — P1** | 世界风险、Timeline、事件 Marker 与 Agent 状态能重置；但 UI Reset 后 CV Panel 仍显示“识别完成”、5 个框及上次结果，未回到待识别状态，违反重置完整性要求 |
+| Synthetic Visual Data | **PASS** | 画面由 CSS 合成，无图片/视频资产、真实人脸或摄像头流；UI 明示 Synthetic Visual Data / 模拟视觉数据与广州演示场景 |
+| Secret | **PASS** | `.env.local` 被忽略且不在 Commit；新增文件密钥值候选为 0；报告未输出 AMap Key/securityJsCode |
+| Personal Data | **PASS** | 80 个名称仅为模拟人员001～080；无真实姓名、人脸、监控视频或个人敏感数据 |
+| Browser E2E | **FAIL** | 1920×1080 主链可运行，Console 0 error；但 1366×768 无法访问 CV 操作入口，Reset 留存 CV 结果，且 Crowd Event Marker 点击被重叠 Marker 劫持，完整演示验收不成立 |
+
+### Issues for ZCode
+
+1. **COD-V3-001 — P1：1366×768 CV Panel 被布局压缩并裁切。** `.right-column` 配置两行但包含 CV、Simulation、Chat 三个子面板；在 1366 宽布局中 CV Panel 高度约 2px。需要调整 grid rows/最小高度/滚动策略，并在 1366×768 与约 720px 高视口复验。
+2. **COD-V3-002 — P1：Reset 未清理 CVDetectionPanel 本地状态。** Reset 后必须清除 phase/result/detections/timers/runningRef，并回到“待识别 · 模拟画面就绪”。
+3. **COD-V3-003 — P2：BBox 缺少边界和校验。** 增加模型级 `x+width<=1` 与 `y+height<=1` 校验及非法输入单测。
+4. **COD-V3-004 — P2：同主体 CV Event Marker 完全重叠。** 需要聚合、偏移、蜘蛛展开或可选择列表，保证 CrowdDetected 与 RiskObjectDetected 均可点击且 InfoWindow 对应正确 Event。
+5. **COD-V3-005 — P3：ECharts chunk 507.96 kB。** 非本轮核心阻断，可后续做懒加载或 manualChunks。
+
+### Round 3 Final Decision
+
+**VALIDATION FAILED**
+
+失败依据：新增 display_name、中文真实 AMap InfoWindow、四场景 CV 事件链、风险、告警、审计、Prediction、What-if、Agent Grounding、Secret 与 Synthetic Data 大部分通过；但存在两个未解决 P1（1366×768 下 CV Demo 不可操作、Reset 未清理 CV 结果）及两个 P2（BBox 跨字段越界未拒绝、同位置 Event Marker 不可可靠点击）。因此完整 Browser E2E 与核心演示验收不能通过。
