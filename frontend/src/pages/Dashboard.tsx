@@ -26,6 +26,7 @@ export default function Dashboard() {
   const [autoRun, setAutoRun] = useState(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [notice, setNotice] = useState('系统就绪 · 等待事件输入')
+  const [resetVersion, setResetVersion] = useState(0)
 
   const agents = useMemo(() => world ? Object.values(world.agents) : [], [world])
   const selectedAgent = world?.agents[selectedAgentId] ?? null
@@ -79,6 +80,8 @@ export default function Dashboard() {
 
   function resetDemo() {
     void execute(async () => {
+      // 先使正在进行的 CV 请求失效，再重置后端，避免迟到响应污染重置后的演示状态。
+      setResetVersion((version) => version + 1)
       setWorld(await api.reset())
       setResults([])
       setActiveSimulation(null)
@@ -180,7 +183,7 @@ export default function Dashboard() {
           <PredictionPanel currentRisk={world.risk_state.overall_score} />
         </div>
         <div className="right-column">
-          <CVDetectionPanel agents={agents} onComplete={handleCVDetection} />
+          <CVDetectionPanel agents={agents} resetVersion={resetVersion} onComplete={handleCVDetection} />
           <SimulationPanel results={results} selected={strategy} busy={busy} onRun={runStrategy} onCompare={compareAll} />
           <ChatPanel messages={messages} busy={busy} onSend={sendMessage} />
         </div>

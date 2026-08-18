@@ -10,6 +10,7 @@ import {
   createPredictedTrack,
   createSimulationOverlays,
   createZoneOverlays,
+  offsetOverlappingEventPositions,
 } from '../map/overlays'
 import type { Agent, Place, SimulationResult, WorldEvent, Zone } from '../types'
 import { AgentMarker } from './AgentMarker'
@@ -124,8 +125,8 @@ export function CityMap({
     for (const agent of agents.slice(0, 80)) {
       overlays.push(createAgentMarker(AMap, map, infoWindow, agent, (item) => agentHandlerRef.current(item)))
     }
-    for (const event of events) {
-      const marker = createEventMarker(AMap, map, infoWindow, event, agents, zones)
+    for (const { event, offset } of offsetOverlappingEventPositions(events, agents, zones)) {
+      const marker = createEventMarker(AMap, map, infoWindow, event, agents, zones, offset)
       if (marker) overlays.push(marker)
     }
     if (selectedAgent) {

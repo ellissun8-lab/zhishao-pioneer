@@ -2,9 +2,11 @@ import { DEMO_MAP_CONFIG } from '../config/map'
 import { agentDisplayName } from '../labels'
 import type { Agent, Place, Position, SimulationResult, WorldEvent, Zone } from '../types'
 import { circlePolygon, getSimulationEndpoint, lngLat } from './coordinates'
-import { buildAgentInfoWindowContent, escapeHtml } from './infoWindow'
+import { buildAgentInfoWindowContent, buildEventInfoWindowContent, escapeHtml } from './infoWindow'
 
 type InfoWindowLike = { setContent: (content: string) => void; open: (map: any, position: any) => void }
+export type EventMarkerOffset = { x: number; y: number }
+export type EventMarkerLayout = { event: WorldEvent; offset: EventMarkerOffset }
 
 const EVENT_COLORS: Record<string, string> = {
   ZoneEntered: '#65d9b8',
@@ -138,6 +140,40 @@ function resolveEventPosition(event: WorldEvent, agents: Agent[], zones: Zone[])
   return objectZone?.center ?? null
 }
 
+export function offsetOverlappingEventPositions(
+  events: WorldEvent[],
+  agents: Agent[],
+  zones: Zone[],
+): EventMarkerLayout[] {
+  const groups = new Map<string, WorldEvent[]>()
+  for (const event of events) {
+    if (!(event.type in EVENT_COLORS)) continue
+    const position = resolveEventPosition(event, agents, zones)
+    if (!position) continue
+    const key = `${position.lng.toFixed(6)},${position.lat.toFixed(6)}`
+    const group = groups.get(key) ?? []
+    group.push(event)
+    groups.set(key, group)
+  }
+
+  const offsets = new Map<string, EventMarkerOffset>()
+  for (const group of groups.values()) {
+    const radius = group.length > 1 ? 18 : 0
+    group.forEach((event, index) => {
+      const angle = (Math.PI * 2 * index) / group.length
+      offsets.set(event.id, {
+        x: 10 + Math.round(Math.cos(angle) * radius),
+        y: -24 + Math.round(Math.sin(angle) * radius),
+      })
+    })
+  }
+
+  return events.flatMap((event) => {
+    const offset = offsets.get(event.id)
+    return offset ? [{ event, offset }] : []
+  })
+}
+
 export function createEventMarker(
   AMap: any,
   map: any,
@@ -145,6 +181,7 @@ export function createEventMarker(
   event: WorldEvent,
   agents: Agent[],
   zones: Zone[],
+  renderOffset: EventMarkerOffset = { x: 10, y: -24 },
 ): any | null {
   if (!(event.type in EVENT_COLORS)) return null
   const position = resolveEventPosition(event, agents, zones)
@@ -153,14 +190,14 @@ export function createEventMarker(
   const marker = new AMap.Marker({
     position: lngLat(position), title: `${event.type} · ${event.source}`,
     content: `<div class="amap-event" style="--event-color:${color}">!</div>`,
-    offset: new AMap.Pixel(10, -24), zIndex: 150,
+    offset: new AMap.Pixel(renderOffset.x, renderOffset.y), zIndex: 150,
   })
-  marker.on('click', () => showInfo(infoWindow, map, position, `${event.type} · Event`, [
-    ['timestamp', new Date(event.timestamp).toLocaleString('zh-CN', { hour12: false })],
-    ['source', event.source],
-    ['confidence', `${(event.confidence * 100).toFixed(0)}%`],
-    ['subject', event.subject_id ?? 'system'],
-  ]))
+  marker.setExtData(event)
+  marker.on('click', () => {
+    const currentEvent: WorldEvent = marker.getExtData() ?? event
+    infoWindow.setContent(buildEventInfoWindowContent(currentEvent))
+    infoWindow.open(map, lngLat(position))
+  })
   return marker
 }
 

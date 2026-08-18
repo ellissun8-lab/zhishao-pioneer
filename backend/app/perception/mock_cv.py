@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from ..ontology.models import Event, EventType
 from .base import CVEventProvider
@@ -11,6 +11,14 @@ class BBox(BaseModel):
     y: float = Field(ge=0, le=1)
     width: float = Field(gt=0, le=1)
     height: float = Field(gt=0, le=1)
+
+    @model_validator(mode="after")
+    def validate_frame_bounds(self) -> "BBox":
+        if self.x + self.width > 1:
+            raise ValueError("bbox exceeds the right edge of the frame")
+        if self.y + self.height > 1:
+            raise ValueError("bbox exceeds the bottom edge of the frame")
+        return self
 
 
 class Detection(BaseModel):

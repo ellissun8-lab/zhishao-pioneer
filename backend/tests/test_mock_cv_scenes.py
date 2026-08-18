@@ -1,10 +1,12 @@
 import json
 
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
+import pytest
 
 from backend.app.main import app
 from backend.app.ontology.models import EventType
-from backend.app.perception.mock_cv import SCENE_CONFIDENCE, SCENE_LAYOUT, MockCVProvider
+from backend.app.perception.mock_cv import BBox, SCENE_CONFIDENCE, SCENE_LAYOUT, MockCVProvider
 from backend.app.service import world_service
 
 client = TestClient(app)
@@ -146,3 +148,25 @@ def test_audit_records_cv_scene_payload():
 
 def test_scene_layout_covers_all_scenes():
     assert set(SCENE_LAYOUT) == set(SCENE_IDS)
+
+
+def test_bbox_rejects_horizontal_overflow():
+    with pytest.raises(ValidationError, match="right edge"):
+        BBox(x=0.8, y=0.1, width=0.3, height=0.2)
+
+
+def test_bbox_rejects_vertical_overflow():
+    with pytest.raises(ValidationError, match="bottom edge"):
+        BBox(x=0.1, y=0.9, width=0.2, height=0.2)
+
+
+@pytest.mark.parametrize(("width", "height"), [(0, 0.2), (0.2, 0)])
+def test_bbox_rejects_zero_size(width: float, height: float):
+    with pytest.raises(ValidationError):
+        BBox(x=0.1, y=0.1, width=width, height=height)
+
+
+def test_bbox_accepts_exact_frame_boundary():
+    bbox = BBox(x=0.8, y=0.8, width=0.2, height=0.2)
+    assert bbox.x + bbox.width == 1
+    assert bbox.y + bbox.height == 1

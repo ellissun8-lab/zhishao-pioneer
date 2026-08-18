@@ -59,9 +59,13 @@ function startDetection() {
   fireEvent.click(screen.getByRole('button', { name: '开始识别' }))
 }
 
+function renderPanel(resetVersion = 0) {
+  return render(<CVDetectionPanel agents={agents} resetVersion={resetVersion} onComplete={onComplete} />)
+}
+
 describe('CVDetectionPanel', () => {
   it('renders the panel, scene buttons and Synthetic Visual Data mark', () => {
-    render(<CVDetectionPanel agents={agents} onComplete={onComplete} />)
+    renderPanel()
     expect(screen.getByText('CV 智能感知')).toBeTruthy()
     expect(screen.getByText('Synthetic Visual Data / 模拟视觉数据')).toBeTruthy()
     expect(screen.getByText('CAM-DEMO-01 · 学校周边模拟监控 · 广州演示场景')).toBeTruthy()
@@ -72,14 +76,14 @@ describe('CVDetectionPanel', () => {
   })
 
   it('switches scenes when idle', () => {
-    render(<CVDetectionPanel agents={agents} onComplete={onComplete} />)
+    renderPanel()
     fireEvent.click(screen.getByRole('button', { name: '人员聚集' }))
     expect(screen.getByText('人员聚集').className).toContain('active')
     expect(screen.getByText('综合高风险').className).not.toContain('active')
   })
 
   it('runs the detection animation, submits once and shows confidence + Chinese labels', async () => {
-    render(<CVDetectionPanel agents={agents} onComplete={onComplete} />)
+    renderPanel()
     startDetection()
     expect(screen.getByText('正在分析画面…')).toBeTruthy()
 
@@ -103,7 +107,7 @@ describe('CVDetectionPanel', () => {
 
     await advance(500)
     expect(api.cvDetect).toHaveBeenCalledTimes(1)
-    expect(api.cvDetect).toHaveBeenCalledWith('scene_high_risk', ['agent_A', 'agent_B', 'agent_C'])
+    expect(api.cvDetect).toHaveBeenCalledWith('scene_high_risk', ['agent_A', 'agent_B', 'agent_C'], expect.any(AbortSignal))
     expect(screen.getByText('识别完成 · 事件已进入 Event Bus')).toBeTruthy()
     expect(screen.getByText('模拟人员001')).toBeTruthy()
     expect(screen.getByText('多人聚集')).toBeTruthy()
@@ -115,7 +119,7 @@ describe('CVDetectionPanel', () => {
   })
 
   it('does not submit the same detection twice on rapid clicks', async () => {
-    render(<CVDetectionPanel agents={agents} onComplete={onComplete} />)
+    renderPanel()
     // 连续快速点击同一个按钮（识别中文案与 disabled 都不能替代防重入守卫）
     const runButton = screen.getByRole('button', { name: '开始识别' })
     fireEvent.click(runButton)
@@ -126,7 +130,7 @@ describe('CVDetectionPanel', () => {
   })
 
   it('never claims a confirmed weapon, only 疑似风险物品', async () => {
-    render(<CVDetectionPanel agents={agents} onComplete={onComplete} />)
+    renderPanel()
     startDetection()
     await advance(2200)
     expect(document.querySelector('.cv-box-risk_object b')!.textContent).toBe('疑似风险物品')
@@ -136,10 +140,53 @@ describe('CVDetectionPanel', () => {
 
   it('surfaces API failures without crashing', async () => {
     vi.mocked(api.cvDetect).mockRejectedValue(new Error('API 500'))
-    render(<CVDetectionPanel agents={agents} onComplete={onComplete} />)
+    renderPanel()
     startDetection()
     await advance(2200)
     expect(screen.getByText('API 500')).toBeTruthy()
     expect(screen.getByRole('button', { name: '开始识别' })).toBeTruthy()
+  })
+
+  it('reset removes all detections and completed result items', async () => {
+    const { rerender } = renderPanel()
+    startDetection()
+    await advance(2200)
+    expect(document.querySelectorAll('.cv-box')).toHaveLength(5)
+    expect(document.querySelector('.cv-result')).toBeTruthy()
+
+    rerender(<CVDetectionPanel agents={agents} resetVersion={1} onComplete={onComplete} />)
+
+    expect(document.querySelectorAll('.cv-box')).toHaveLength(0)
+    expect(document.querySelector('.cv-result')).toBeNull()
+  })
+
+  it('reset returns an in-progress detection to idle and clears timers', async () => {
+    const { rerender } = renderPanel()
+    startDetection()
+    await advance(1100)
+    expect(screen.getByText('逐个定位检测目标…')).toBeTruthy()
+
+    rerender(<CVDetectionPanel agents={agents} resetVersion={1} onComplete={onComplete} />)
+    await advance(1200)
+
+    expect(screen.getByText('待识别 · 模拟画面就绪')).toBeTruthy()
+    expect(api.cvDetect).not.toHaveBeenCalled()
+  })
+
+  it('ignores a stale detection response that resolves after reset', async () => {
+    let resolveRequest!: (value: CVSceneResult) => void
+    vi.mocked(api.cvDetect).mockReturnValue(new Promise((resolve) => { resolveRequest = resolve }))
+    const { rerender } = renderPanel()
+    startDetection()
+    await advance(2000)
+    expect(api.cvDetect).toHaveBeenCalledTimes(1)
+
+    rerender(<CVDetectionPanel agents={agents} resetVersion={1} onComplete={onComplete} />)
+    await act(async () => { resolveRequest(sceneResult) })
+
+    expect(screen.getByText('待识别 · 模拟画面就绪')).toBeTruthy()
+    expect(document.querySelectorAll('.cv-box')).toHaveLength(0)
+    expect(document.querySelector('.cv-result')).toBeNull()
+    expect(onComplete).not.toHaveBeenCalled()
   })
 })

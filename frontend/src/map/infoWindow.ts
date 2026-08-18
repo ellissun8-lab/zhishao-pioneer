@@ -1,5 +1,5 @@
 import { agentDisplayName, behaviorStateLabel, riskLevelLabel } from '../labels'
-import type { Agent } from '../types'
+import type { Agent, WorldEvent } from '../types'
 
 export function escapeHtml(value: unknown): string {
   return String(value ?? '')
@@ -22,4 +22,15 @@ export function buildAgentInfoWindowContent(agent: Agent): string {
   ]
   const details = rows.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><b>${escapeHtml(value)}</b></div>`).join('')
   return `<section class="amap-info-card"><header>${escapeHtml(agentDisplayName(agent))}</header>${details}</section>`
+}
+
+export function buildEventInfoWindowContent(event: WorldEvent): string {
+  const rows: Array<[string, string]> = [
+    ['timestamp', new Date(event.timestamp).toLocaleString('zh-CN', { hour12: false })],
+    ['source', event.source],
+    ['confidence', `${(event.confidence * 100).toFixed(0)}%`],
+    ['subject', event.subject_id ?? 'system'],
+  ]
+  const details = rows.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><b>${escapeHtml(value)}</b></div>`).join('')
+  return `<section class="amap-info-card"><header>${escapeHtml(event.type)} · Event</header>${details}</section>`
 }

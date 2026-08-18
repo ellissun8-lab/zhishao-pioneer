@@ -69,9 +69,9 @@ function boxTitle(detection: PreviewDetection | CVDetection, personIndex: number
   return '车辆'
 }
 
-type Props = { agents: Agent[]; onComplete: (result: CVSceneResult) => void }
+type Props = { agents: Agent[]; resetVersion: number; onComplete: (result: CVSceneResult) => void }
 
-export function CVDetectionPanel({ agents, onComplete }: Props) {
+export function CVDetectionPanel({ agents, resetVersion, onComplete }: Props) {
   const [sceneId, setSceneId] = useState('scene_high_risk')
   const [phase, setPhase] = useState<Phase>('idle')
   const [detections, setDetections] = useState<PreviewDetection[]>([])
@@ -79,12 +79,31 @@ export function CVDetectionPanel({ agents, onComplete }: Props) {
   const [error, setError] = useState('')
   const runningRef = useRef(false)
   const timersRef = useRef<number[]>([])
+  const generationRef = useRef(0)
+  const abortRef = useRef<AbortController | null>(null)
 
   const subjects = useMemo(() => agents.slice(0, 3), [agents])
   const preview = SCENE_PREVIEW[sceneId] ?? []
   const busy = phase !== 'idle' && phase !== 'done'
 
-  useEffect(() => () => { timersRef.current.forEach((timer) => window.clearTimeout(timer)) }, [])
+  useEffect(() => {
+    generationRef.current += 1
+    abortRef.current?.abort()
+    abortRef.current = null
+    clearTimers()
+    runningRef.current = false
+    setSceneId('scene_high_risk')
+    setPhase('idle')
+    setDetections([])
+    setResult(null)
+    setError('')
+  }, [resetVersion])
+
+  useEffect(() => () => {
+    generationRef.current += 1
+    abortRef.current?.abort()
+    clearTimers()
+  }, [])
 
   function clearTimers() {
     timersRef.current.forEach((timer) => window.clearTimeout(timer))
@@ -94,6 +113,9 @@ export function CVDetectionPanel({ agents, onComplete }: Props) {
   function switchScene(nextId: string) {
     if (busy || nextId === sceneId) return
     clearTimers()
+    generationRef.current += 1
+    abortRef.current?.abort()
+    abortRef.current = null
     runningRef.current = false
     setSceneId(nextId)
     setPhase('idle')
@@ -105,12 +127,17 @@ export function CVDetectionPanel({ agents, onComplete }: Props) {
   function startDetection() {
     if (runningRef.current) return // 连续点击不会重复提交同一次 detection
     runningRef.current = true
+    const generation = generationRef.current
+    const controller = new AbortController()
+    abortRef.current = controller
     setError('')
     setResult(null)
     setDetections([])
     setPhase('analyzing')
     const schedule = (delay: number, action: () => void) => {
-      timersRef.current.push(window.setTimeout(action, delay))
+      timersRef.current.push(window.setTimeout(() => {
+        if (generation === generationRef.current) action()
+      }, delay))
     }
     schedule(500, () => setPhase('scanning'))
     schedule(1000, () => {
@@ -122,16 +149,21 @@ export function CVDetectionPanel({ agents, onComplete }: Props) {
       setPhase('submitting')
       void (async () => {
         try {
-          const response = await api.cvDetect(sceneId, subjects.map((agent) => agent.id))
+          const response = await api.cvDetect(sceneId, subjects.map((agent) => agent.id), controller.signal)
+          if (generation !== generationRef.current) return
           setDetections(response.detections)
           setResult(response)
           setPhase('done')
           onComplete(response)
         } catch (caught) {
+          if (generation !== generationRef.current) return
           setError(caught instanceof Error ? caught.message : '识别请求失败')
           setPhase('idle')
         } finally {
-          runningRef.current = false
+          if (generation === generationRef.current) {
+            runningRef.current = false
+            abortRef.current = null
+          }
         }
       })()
     })

@@ -32,12 +32,12 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ detection, subject_id: 'agent_A' }),
     }),
-  cvDetect: (sceneId: string, subjectIds: string[]) =>
+  cvDetect: (sceneId: string, subjectIds: string[], signal?: AbortSignal) =>
     request<CVSceneResult>('/api/perception/mock-cv/detect', {
       method: 'POST',
       body: JSON.stringify({ scene_id: sceneId, subject_ids: subjectIds }),
+      signal,
     }),
   chat: (message: string) =>
     request<{ answer: string }>('/api/chat', { method: 'POST', body: JSON.stringify({ message }) }),
 }
-
