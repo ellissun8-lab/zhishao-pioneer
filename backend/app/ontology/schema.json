@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Zhishao Pioneer Ontology",
+  "description": "All Person and behavior records are synthetic demo data (Guangzhou demo scene).",
+  "entities": ["Person", "Place", "Zone", "Event", "Action"],
+  "relations": {
+    "located_at": "Person -> Place",
+    "enters": "Person -> Zone",
+    "gathers_with": "Person -> Person",
+    "occurs_at": "Event -> Place",
+    "changes": "Event -> WorldState",
+    "affects": "Action -> Event"
+  }
+}

@@ -1,0 +1,26 @@
+[
+  {
+    "id": "school_001",
+    "category": "school",
+    "name": "开放数据示例学校（广州演示）",
+    "lng": 113.2644,
+    "lat": 23.1291,
+    "source": "demo_public_dataset"
+  },
+  {
+    "id": "hospital_001",
+    "category": "hospital",
+    "name": "开放数据示例医院（广州演示）",
+    "lng": 113.276,
+    "lat": 23.122,
+    "source": "demo_public_dataset"
+  },
+  {
+    "id": "station_001",
+    "category": "station",
+    "name": "开放数据示例车站（广州演示）",
+    "lng": 113.252,
+    "lat": 23.134,
+    "source": "demo_public_dataset"
+  }
+]
