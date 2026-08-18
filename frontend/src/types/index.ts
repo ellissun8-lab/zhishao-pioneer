@@ -4,6 +4,7 @@ export type Agent = {
   id: string
   type: 'Person'
   synthetic: true
+  display_name: string
   risk_level: 'low' | 'medium' | 'high'
   position: Position
   destination: Position | null
@@ -86,4 +87,25 @@ export type SimulationResult = {
 }
 
 export type ChatMessage = { role: 'user' | 'assistant'; content: string }
+
+export type CVLabel = 'person' | 'crowd' | 'risk_object' | 'vehicle'
+
+export type CVBBox = { x: number; y: number; width: number; height: number }
+
+export type CVDetection = {
+  id: string
+  label: CVLabel
+  confidence: number
+  bbox: CVBBox
+  subject_id: string | null
+  synthetic: true
+}
+
+export type CVSceneResult = {
+  scene_id: string
+  synthetic: boolean
+  detections: CVDetection[]
+  events: WorldEvent[]
+  risk_state?: RiskState
+}
 

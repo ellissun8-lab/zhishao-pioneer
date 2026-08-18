@@ -3,7 +3,7 @@ import type { ChatMessage } from '../types'
 
 type Props = { messages: ChatMessage[]; busy: boolean; onSend: (message: string) => void }
 
-const suggestions = ['为什么学校区域现在是红色？', '未来10分钟会怎样？', '如果现在发送预警，会发生什么？']
+const suggestions = ['为什么风险升高？', '为什么学校区域现在是红色？', '未来10分钟会怎样？', '如果现在发送预警，会发生什么？']
 
 export function ChatPanel({ messages, busy, onSend }: Props) {
   const [input, setInput] = useState('')

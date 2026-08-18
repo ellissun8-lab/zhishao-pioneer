@@ -44,6 +44,7 @@ def generate_synthetic_agents(count: int = 80, seed: int = DEFAULT_SEED) -> list
         agents.append(
             Agent(
                 id=f"agent_{chr(65 + index) if index < 26 else index + 1}",
+                display_name=f"模拟人员{index + 1:03d}",
                 risk_level=risk_level,
                 position=position,
                 destination=destination,

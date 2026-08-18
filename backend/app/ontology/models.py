@@ -80,6 +80,8 @@ class Agent(BaseModel):
     id: str
     type: str = "Person"
     synthetic: bool = True
+    # 展示用中文名称（模拟人员NNN），仅用于前端显示，不参与主键/关系
+    display_name: str = ""
     risk_level: RiskLevel = RiskLevel.LOW
     position: Position
     destination: Position | None = None

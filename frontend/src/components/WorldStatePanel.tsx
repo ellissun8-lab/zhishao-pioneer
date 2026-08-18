@@ -1,4 +1,5 @@
 import type { Agent, WorldState, Zone } from '../types'
+import { agentDisplayName, behaviorStateLabel, riskLevelLabel } from '../labels'
 
 type Props = { world: WorldState; selectedAgent: Agent | null; selectedZone: Zone | null }
 
@@ -14,12 +15,13 @@ export function WorldStatePanel({ world, selectedAgent, selectedZone }: Props) {
       </div>
       {selectedAgent ? (
         <div className="selection-card">
-          <div><span className={`agent-pulse ${selectedAgent.risk_level}`} /><b>{selectedAgent.id}</b><small>SYNTHETIC</small></div>
+          <div><span className={`agent-pulse ${selectedAgent.risk_level}`} /><b>{agentDisplayName(selectedAgent)}</b><small>SYNTHETIC</small></div>
           <dl>
-            <div><dt>风险等级</dt><dd>{selectedAgent.risk_level}</dd></div>
-            <div><dt>行为状态</dt><dd>{selectedAgent.behavior_state}</dd></div>
+            <div><dt>Agent ID</dt><dd>{selectedAgent.id}</dd></div>
+            <div><dt>风险等级</dt><dd>{riskLevelLabel(selectedAgent.risk_level)}</dd></div>
+            <div><dt>行为状态</dt><dd>{behaviorStateLabel(selectedAgent.behavior_state)}</dd></div>
             <div><dt>社会组</dt><dd>{selectedAgent.social_group}</dd></div>
-            <div><dt>位置</dt><dd>{selectedAgent.position.lng.toFixed(4)}, {selectedAgent.position.lat.toFixed(4)}</dd></div>
+            <div><dt>当前坐标</dt><dd>{selectedAgent.position.lng.toFixed(4)}, {selectedAgent.position.lat.toFixed(4)}</dd></div>
           </dl>
         </div>
       ) : selectedZone ? (

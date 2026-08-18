@@ -1,8 +1,10 @@
 import { DEMO_MAP_CONFIG } from '../config/map'
+import { agentDisplayName } from '../labels'
 import type { Agent, Place, Position, SimulationResult, WorldEvent, Zone } from '../types'
 import { circlePolygon, getSimulationEndpoint, lngLat } from './coordinates'
+import { buildAgentInfoWindowContent, escapeHtml } from './infoWindow'
 
-type InfoWindowLike = { setContent: (content: string) => void; open: (map: any, position: [number, number]) => void }
+type InfoWindowLike = { setContent: (content: string) => void; open: (map: any, position: any) => void }
 
 const EVENT_COLORS: Record<string, string> = {
   ZoneEntered: '#65d9b8',
@@ -11,15 +13,6 @@ const EVENT_COLORS: Record<string, string> = {
   RiskObjectDetected: '#ff6650',
   AlertTriggered: '#ff3f56',
   VehicleDetected: '#8fb6d9',
-}
-
-function escapeHtml(value: unknown): string {
-  return String(value ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;')
 }
 
 function showInfo(infoWindow: InfoWindowLike, map: any, position: Position, title: string, rows: Array<[string, unknown]>) {
@@ -38,19 +31,18 @@ export function createAgentMarker(
   const color = agent.risk_level === 'high' ? '#ff5d46' : agent.risk_level === 'medium' ? '#ffb547' : '#65d99c'
   const marker = new AMap.Marker({
     position: lngLat(agent.position),
-    title: `${agent.id} · Synthetic Data`,
+    title: `${agentDisplayName(agent)} · Synthetic Data`,
     content: `<div class="amap-agent" style="--agent-color:${color}"><span></span></div>`,
     offset: new AMap.Pixel(-9, -9),
     zIndex: agent.risk_level === 'high' ? 120 : 100,
   })
+  // extData 持有最新 World State 数据；CityMap 每次 World State 更新会重建标记，创建时即写入
+  marker.setExtData(agent)
   marker.on('click', () => {
-    onClick(agent)
-    showInfo(infoWindow, map, agent.position, `${agent.id} · Synthetic Data`, [
-      ['risk_level', agent.risk_level],
-      ['risk_score', agent.risk_score.toFixed(1)],
-      ['behavior_state', agent.behavior_state],
-      ['position', `${agent.position.lng.toFixed(6)}, ${agent.position.lat.toFixed(6)}`],
-    ])
+    const currentAgent: Agent = marker.getExtData() ?? agent
+    onClick(currentAgent)
+    infoWindow.setContent(buildAgentInfoWindowContent(currentAgent))
+    infoWindow.open(map, marker.getPosition() ?? lngLat(currentAgent.position))
   })
   return marker
 }

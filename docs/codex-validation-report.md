@@ -2,7 +2,9 @@
 
 ## Validation Status
 
-**VALIDATION FAILED**
+**LATEST STATUS: VALIDATION PASSED WITH WARNINGS — DEMO READY（Round 2）**
+
+> 第一轮历史结论为 `VALIDATION FAILED`；当前有效结论见文末 `Round 2 Revalidation`，绑定 Commit `313fb8a108fe271e1206ca7dacbe2bff8bc63f46`。
 
 - 验证日期：2026-08-18（Asia/Singapore）
 - 验证模式：Fast Validation Mode，第一轮只读验证
@@ -144,3 +146,65 @@
 **VALIDATION FAILED**
 
 失败主因：广州场景未实现（未解决 P1），且 Ontology、ZoneEntered 衰减、状态机和 Mock CV 仍有 P2 缺陷。根据验收规则，存在未解决 P1 时不得标记 `VALIDATION PASSED` 或 `DEMO READY`。
+
+---
+
+## Round 2 Revalidation
+
+### Bound Git Baseline
+
+- Git Commit：`313fb8a108fe271e1206ca7dacbe2bff8bc63f46`
+- `git rev-parse HEAD`：精确匹配指定 Commit。
+- 验证开始及报告更新前：业务工作区干净，无 VERSION DRIFT。
+- `git ls-files frontend/.env.local`：无输出，真实本地配置未进入 Commit。
+- 该 Commit 是仓库根提交，不存在父提交，无法进行父提交级“删除旧测试”对比；已改为审查全部测试源码。未发现 `skip`、`xfail`、降低核心断言或以 mock 替代核心实现。
+
+### COD-V Closure Status
+
+| Issue | Status | 独立复验证据 |
+|---|---|---|
+| COD-V-001 广州场景 | **CLOSED** | `city='广州市'`、中心 `[113.2644, 23.1291]`；80 Agent 的 position/destination/history、Place、Zone、运行时轨迹均通过广州范围检查；当前业务代码无旧 `120.* / 31.57 / 31.58` 坐标 |
+| COD-V-002 Ontology | **CLOSED** | lng=999、lat=999、缺 subject_id、非法 EventType、非法 risk_level、非法 metadata.position 均返回 422；关系支持 located_at/enters/gathers_with/occurs_at/changes/affects；进入/退出及聚集/解散关系正确增删 |
+| COD-V-003 Zone 风险语义 | **CLOSED** | `SensitiveZoneActive` 在 T0 与 T+60min 均为 18.0；ZoneExited 后消失；CrowdGathered `20.0→0.31`、RiskObjectDetected `35.0→8.75` 保持事件衰减 |
+| COD-V-004 State Machine | **CLOSED** | 合法 Idle+MoveStarted→Moving；非法 Idle+MoveStopped 保持 Idle，metadata 写入 `rejected_transition`，SQLite payload 可追溯 |
+| COD-V-005 Crowd 分层 | **CLOSED** | Mock CV `crowd` 产出 CrowdDetected；与 CrowdGathered 独立共存；权重实测 9.1（confidence 0.91）与 20.0 |
+| COD-V-006 Git 基线 | **CLOSED** | 固定 HEAD 存在且匹配；验证期间无业务代码漂移；`.env.local` 未被跟踪 |
+
+### Round 2 Test Matrix
+
+| 验证项 | 结果 | 证据 |
+|---|---|---|
+| pytest | **PASS** | `40 passed in 1.11s` |
+| Demo test | **PASS** | `DEMO READY`；风险 `28.8→28.8→49.5→72.5→100.0` |
+| Frontend build | **PASS WITH P3 WARNING** | 635 modules；构建成功；ECharts chunk 507.96 kB |
+| 广州场景 | **PASS** | UI 清晰显示“广州演示场景 / SYNTHETIC DATA”；真实底图显示广州市 |
+| Synthetic Agent | **PASS** | 80/80 synthetic；60 tick 产生 481 个事件；80 个主体均移动；固定 seed 两次结果一致；所有运行时位置仍在广州范围 |
+| Ontology | **PASS** | 六类非法黑盒输入全部 422；关系动态增删通过 |
+| State Machine | **PASS** | current state + event type guard、非法拒绝、metadata/SQLite 审计通过 |
+| Risk / Time Semantics | **PASS** | Zone 持续状态贡献与 Crowd/RiskObject 事件半衰减均符合本轮规则 |
+| Core Event Flow | **PASS** | MoveStarted→ZoneEntered→CrowdDetected→CrowdGathered→AlertTriggered→RiskObjectDetected；UI 风险 `29→29→50→60→83→100` |
+| Prediction | **PASS** | 5/10/30 min 均可运行；Scenario A 的 10min=26.8，Scenario B 的 10min=100.0，概率亦不同，非固定返回 |
+| What-if Isolation | **PASS** | 实时 WorldState 序列化前后相等；none=100、warn=68、guide_leave=41、intervene=16 |
+| Mock CV | **PASS** | Person/Vehicle/CrowdDetected/RiskObject 标准事件链可用 |
+| Agent Grounding | **PASS** | 风险解释使用 get_risk_analysis/get_active_events；无 RiskObject 状态不编造；未来问题仅调用 predict_future；E2E 回答与 UI 风险同为 100 |
+| SQLite | **PASS** | 含 event_id/type/subject_id/source/confidence/occurred_at/payload；五类关键事件均存在；rejected_transition 可查询 |
+| AMap | **PASS — ONLINE VERIFIED** | 有效 Key 下真实高德广州底图加载；80 Agent Marker、school_zone_001 500m Circle、历史/预测 Polyline、Event Marker、Agent/Event InfoWindow 均验证 |
+| Browser E2E | **PASS** | 唯一端口隔离实例完成事件链、10min Prediction、WARN/GUIDE/INTERVENE、状态隔离及 Agent 解释；Console 0 error，操作网络响应正常 |
+| Map Lifecycle | **PASS** | 连续 5 次加载均为 80 Agent Marker、84 总 Marker、0 Event Marker、1 个 AMap script，无重复；Console 0 error；组件 cleanup 调用 `map.destroy()` |
+| Secret Scan | **PASS** | 无硬编码 key/token/password/secret；仅跟踪 `.env.example`；未在报告泄露真实值 |
+| Personal Data | **PASS** | 手机号/身份证模式无匹配；无真实人脸、真实轨迹或真实在逃人员数据；全部 Person 为 Synthetic |
+| Test Integrity | **PASS WITH LIMITATION** | 40 项测试断言覆盖实际 API/运行时/SQLite；无 skip/xfail/核心 mock。根提交无父版本，无法证明历史测试未被删除，但未发现规避测试证据 |
+
+### Browser Isolation Note
+
+首次使用共享 `8000/5173` 实例时，另一浏览器标签保留自动 Tick，导致实时 World State 串扰。该混合结果未用于通过判定。最终核心 E2E 使用运行时隔离的 `8002/5174` 实例（同一固定 Commit、未改仓库文件）重新执行并通过；验证服务已停止。
+
+### Remaining Warning
+
+- **P3 Minor**：`riskChartEngine` 构建产物 507.96 kB，超过 Vite 默认 500 kB 提示阈值。属于非核心性能警告，不阻断黑客松 Demo。
+
+### Round 2 Final Decision
+
+**VALIDATION PASSED WITH WARNINGS — DEMO READY**
+
+依据：40 项 pytest、Demo、前端构建、COD-V-001～006、核心 E2E、What-if Isolation、Agent Grounding、真实广州 AMap、Secret Scan 与 Synthetic Data 均通过；无 P0、无未解决 P1。仅剩 ECharts chunk-size P3 警告。

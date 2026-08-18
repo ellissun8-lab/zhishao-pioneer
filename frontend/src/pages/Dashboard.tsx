@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client'
 import { ChatPanel } from '../components/ChatPanel'
 import { CityMap } from '../components/CityMap'
+import { CVDetectionPanel } from '../components/CVDetectionPanel'
 import { EventTimeline } from '../components/EventTimeline'
 import { PredictionPanel } from '../components/PredictionPanel'
 import { RiskChart } from '../components/RiskChart'
@@ -9,7 +10,7 @@ import { RiskPanel } from '../components/RiskPanel'
 import { SimulationPanel } from '../components/SimulationPanel'
 import { WorldStatePanel } from '../components/WorldStatePanel'
 import { useWorld } from '../stores/useWorld'
-import type { Agent, ChatMessage, SimulationResult, Strategy, Zone } from '../types'
+import type { Agent, ChatMessage, CVSceneResult, SimulationResult, Strategy, Zone } from '../types'
 
 const AUTO_TICK_INTERVAL_MS = 1500
 
@@ -96,6 +97,13 @@ export default function Dashboard() {
     })
   }
 
+  function handleCVDetection(result: CVSceneResult) {
+    void (async () => {
+      await refresh()
+      setNotice(`CV 识别完成：${result.events.length} 个感知事件已进入 Event Bus`)
+    })()
+  }
+
   function runStrategy(nextStrategy: Strategy) {
     setStrategy(nextStrategy)
     void execute(async () => {
@@ -172,6 +180,7 @@ export default function Dashboard() {
           <PredictionPanel currentRisk={world.risk_state.overall_score} />
         </div>
         <div className="right-column">
+          <CVDetectionPanel agents={agents} onComplete={handleCVDetection} />
           <SimulationPanel results={results} selected={strategy} busy={busy} onRun={runStrategy} onCompare={compareAll} />
           <ChatPanel messages={messages} busy={busy} onSend={sendMessage} />
         </div>

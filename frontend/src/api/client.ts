@@ -1,4 +1,4 @@
-import type { Prediction, SimulationResult, Strategy, WorldState } from '../types'
+import type { CVSceneResult, Prediction, SimulationResult, Strategy, WorldState } from '../types'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
@@ -31,6 +31,11 @@ export const api = {
     request('/api/perception/mock', {
       method: 'POST',
       body: JSON.stringify({ detection, subject_id: 'agent_A' }),
+    }),
+  cvDetect: (sceneId: string, subjectIds: string[]) =>
+    request<CVSceneResult>('/api/perception/mock-cv/detect', {
+      method: 'POST',
+      body: JSON.stringify({ scene_id: sceneId, subject_ids: subjectIds }),
     }),
   chat: (message: string) =>
     request<{ answer: string }>('/api/chat', { method: 'POST', body: JSON.stringify({ message }) }),
