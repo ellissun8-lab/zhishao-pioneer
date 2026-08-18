@@ -2,7 +2,7 @@
 
 ## Validation Status
 
-**LATEST STATUS: VALIDATION FAILED（Round 3）**
+**LATEST STATUS: VALIDATION PASSED WITH WARNINGS — DEMO READY（Round 4）**
 
 > 第一轮历史结论为 `VALIDATION FAILED`；当前有效结论见文末 `Round 2 Revalidation`，绑定 Commit `313fb8a108fe271e1206ca7dacbe2bff8bc63f46`。
 
@@ -275,3 +275,74 @@
 **VALIDATION FAILED**
 
 失败依据：新增 display_name、中文真实 AMap InfoWindow、四场景 CV 事件链、风险、告警、审计、Prediction、What-if、Agent Grounding、Secret 与 Synthetic Data 大部分通过；但存在两个未解决 P1（1366×768 下 CV Demo 不可操作、Reset 未清理 CV 结果）及两个 P2（BBox 跨字段越界未拒绝、同位置 Event Marker 不可可靠点击）。因此完整 Browser E2E 与核心演示验收不能通过。
+
+---
+
+## Round 4 — Final CV UI Revalidation
+
+### Bound Baseline
+
+- Git Commit：`e936038855c1b087c6644da9d5ac3cb0e81b5d79`
+- 上一轮 Codex 报告 Commit：`ffc58f0e7809f4e3317527e25d4ff33246f8bbbe`
+- 验证开始时 `git rev-parse HEAD` 精确匹配，Working Tree 为 **CLEAN**。
+- 本轮未修改业务代码；报告更新前再次确认业务工作区无 VERSION DRIFT。
+
+### Automated Regression
+
+| 项目 | 结果 | 独立实测 |
+|---|---|---|
+| pytest | **PASS** | `61 passed in 1.73s` |
+| demo_test | **PASS** | `DEMO READY` |
+| npm test | **PASS** | 4 files，`17 passed` |
+| npm build | **PASS WITH P3 WARNING** | 638 modules；构建成功；`riskChartEngine` 507.96 kB |
+| Test Integrity | **PASS** | 无 skip、xfail、`.only`；未删除旧测试，相关测试数量净增加 |
+
+### Round 3 Issue Closure
+
+| Issue | 状态 | 复验证据 |
+|---|---|---|
+| ROUND3-P1-01 — 1366×768 CV Panel 被压缩 | **CLOSED** | 实际高度 360px；Synthetic Visual Data、场景、选择按钮及开始识别均可见且可点击；按钮中心命中 `.cv-run.primary` |
+| ROUND3-P1-02 — Reset 后 CV Detection 残留 | **CLOSED** | Reset 后 idle、0 box、0 result、0 confidence、0 scanline；Timeline/AMap Event Marker 清空，风险回 28.8；再次识别成功 |
+| ROUND3-P2-01 — BBox 允许越界 | **CLOSED** | `.8+.2`、`.7+.3` 合法；水平/垂直越界、零宽、零高及 confidence 越界全部 ValidationError；非法构造前后 SQLite audit 数量不变 |
+| ROUND3-P2-02 — 共点 Event Marker 串事件 | **CLOSED** | Crowd/Risk Marker 实测相距 36px；分别点击显示 CrowdDetected 与 RiskObjectDetected；五次刷新偏移恒定 |
+
+### Validation Matrix
+
+| 验证项 | 结果 | 独立证据 |
+|---|---|---|
+| CV 1366×768 | **PASS** | Panel 360px；全部核心控件可操作；允许页面纵向滚动，无浏览器缩放 |
+| CV 1440×900 | **PASS** | Panel 360px；场景与开始识别按钮可操作 |
+| CV 1920×1080 | **PASS** | Panel 436.27px；大屏布局未破坏 |
+| Initial State | **PASS** | 待识别 · 模拟画面就绪；0 box/result/confidence/scanline |
+| Reset UI | **PASS** | 高风险识别后 Reset 完整清除 CV 本地状态；后端 risk=28.8、events=0，Agent A/B 恢复 moving、agent_50 恢复 idle |
+| Reset Late Response Protection | **PASS** | 检测到“逐个定位”阶段立即 Reset，等待超过原完成时间后仍为 idle，0 box/result/confidence/scanline/event；源码实际含 resetVersion、generationRef、AbortController |
+| BBox Horizontal Overflow | **PASS** | `x=.8,width=.3` 被拒绝 |
+| BBox Vertical Overflow | **PASS** | `y=.9,height=.2` 被拒绝 |
+| BBox Zero Size | **PASS** | width=0、height=0 均被拒绝；confidence 仍限制在 0～1 |
+| Marker Visual Offset | **PASS** | 同业务位置使用 Overlay Pixel offset：Crowd `translate(28px,-24px)`，Risk `translate(-8px,-24px)`；间距 36px |
+| Marker Event Binding | **PASS** | 调用链为 setExtData(event) → getExtData() → buildEventInfoWindowContent(currentEvent)；分别点击得到正确类型/置信度/subject |
+| Marker Offset Determinism | **PASS** | 连续五次刷新偏移值完全一致，无 Math.random |
+| Marker Coordinate Integrity | **PASS** | 只构造 `AMap.Pixel` 渲染偏移，不修改 Event/Agent 坐标；API/World State/SQLite payload 未出现偏移位置写回 |
+| Core CV Event Flow | **PASS** | 1366×768 实际产生 PersonDetected×3、CrowdDetected、RiskObjectDetected、AlertTriggered；风险 28.8→75，Timeline 与两个 AMap Event Marker 同步 |
+| Prediction | **PASS** | 高风险状态 10min=82、趋势上升、聚集 85%、入区 33%，模型 transparent_rule_probability_v1 |
+| What-if Isolation | **PASS** | NONE 75→78、WARN 75→51、GUIDE_LEAVE 75→31、INTERVENE 75→12；前后 World State SHA-256 与实时风险完全一致 |
+| Agent Grounding | **PASS** | CV 前回答无活跃事件；CV 后只引用实际 CrowdDetected、RiskObjectDetected、AlertTriggered 与风险 contributors，无 CrowdGathered 幻觉 |
+| Alert Deduplication | **PASS** | 单次场景 World State 仅 1 个 Alert；继续发布非关键事件后仍为 1，无事件风暴 |
+| SQLite | **PASS** | CV/Alert 记录包含 event_id/type/subject/source/confidence/timestamp/payload；CV payload 含 scene_id 与 bbox；非法 BBox 未写审计 |
+| AMap / display_name | **PASS — ONLINE VERIFIED** | 广州市高德在线；点击模拟人员001/050/080 均显示中文模板、Agent ID、风险、行为和坐标，无旧英文开发字段；边缘 Marker 通过地图缩放正常访问 |
+| Map Lifecycle | **PASS** | 连续五次刷新均为 80 Agent Marker、2 Event Marker、1 Map root、1 AMap script；偏移不漂移；源码 cleanup 保留 `map.destroy()`；Console 0 error |
+| Vite Runtime Consistency | **PASS** | 5173 实际返回模块包含新版 CV reset/generation/abort、CityMap offset 调用、Pixel offset、Event formatter；浏览器 UI 行为与磁盘源码一致 |
+| Synthetic Visual Data | **PASS** | 无图片/视频资产、人脸或真实监控流；UI 明示 Synthetic Visual Data / 模拟视觉数据 |
+| Secret | **PASS** | `.env.local` 未跟踪且被忽略；新增 Commit 密钥值候选为 0；未输出真实 Key |
+| Personal Data | **PASS** | 80 个 display_name 唯一且全部匹配“模拟人员NNN”；无真实身份或个人数据 |
+| Browser E2E | **PASS** | 1366×768 完成高德在线→CV→风险/Timeline/Marker→Prediction→四策略→退出 Simulation→状态隔离→Agent 问答；Console 0 error |
+
+### Remaining Warning
+
+- **P3 Minor**：`riskChartEngine` 507.96 kB，仍超过 Vite 默认 500 kB chunk 提示阈值；不影响功能、现场交互或 Demo。
+
+### Round 4 Final Decision
+
+**VALIDATION PASSED WITH WARNINGS — DEMO READY**
+
+依据：四项 Round 3 问题全部 CLOSED；自动回归、1366×768 完整 E2E、Reset/迟到响应、BBox、Marker Binding、核心 CV Event Flow、Prediction、What-if Isolation、Agent Grounding、SQLite、真实广州 AMap、display_name、Map Lifecycle、Secret 与 Personal Data 全部通过；无 P0、无 P1。仅剩 ECharts chunk-size P3 性能警告。
