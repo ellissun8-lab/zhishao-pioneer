@@ -171,6 +171,31 @@ button:disabled { opacity: .45; cursor: wait; }
 .comparison-bars i { height: 4px; background: #1b2b2d; }
 .comparison-bars i b { display: block; height: 100%; background: linear-gradient(90deg, #56cdb4, #efb25f, #ff6450); }
 .comparison-bars strong { color: #b5c8c5; font: 9px ui-monospace, monospace; }
+.ml-panel { padding-bottom: 9px; }
+.ml-panel .panel-heading em { color: #6fd7be; }
+.ml-body { padding: 10px; }
+.ml-stat { display: grid; gap: 3px; padding: 8px 9px; background: #0c1719; border: 1px solid #203133; }
+.ml-stat > span { color: #617476; font-size: 9px; letter-spacing: .08em; }
+.ml-stat > strong { color: #e2b369; font: 700 17px ui-monospace, monospace; }
+.ml-stat > strong small { color: #5f7375; font-size: 8px; letter-spacing: .1em; }
+.ml-stat > em { color: #5f7375; font: 8px ui-monospace, monospace; font-style: normal; }
+.ml-badges { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
+.ml-badge { display: grid; gap: 3px; padding: 7px 8px; background: #0c1719; border: 1px solid #203133; border-radius: 2px; }
+.ml-badge i { color: #546769; font: normal 8px ui-monospace, monospace; letter-spacing: .1em; font-style: normal; }
+.ml-badge b { color: #6d8082; font-size: 10px; }
+.ml-badge.loaded { border-color: #396e64; }
+.ml-badge.loaded b { color: #8ce2cf; }
+.ml-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
+.ml-metrics > div { display: grid; gap: 3px; padding: 7px 8px; background: #0c1719; border: 1px solid #203133; }
+.ml-metrics span { color: #617476; font-size: 8px; letter-spacing: .08em; }
+.ml-metrics strong { color: #69d0ba; font: 700 15px ui-monospace, monospace; }
+.ml-note { margin: 7px 2px 0; color: #5f7375; font: 8px ui-monospace, monospace; }
+.ml-note.fallback { color: #e2b369; }
+.ml-error { margin: 10px; color: #ff8c79; font-size: 9px; }
+.ml-recommend { margin: 0 10px; padding-top: 7px; border-top: 1px dashed #233537; }
+.ml-recommend-head { display: flex; justify-content: space-between; color: #899b9c; font-size: 9px; }
+.ml-recommend-head b { color: #8ce2cf; }
+.ml-explanation { margin: 6px 0 7px; color: #778a8c; font-size: 9px; line-height: 1.6; }
 .chat-panel { display: grid; grid-template-rows: 39px 1fr auto auto; min-height: 265px; }
 .chat-messages { min-height: 90px; max-height: 230px; overflow: auto; padding: 10px; }
 .agent-intro { display: flex; align-items: flex-start; gap: 8px; color: #778a8c; font-size: 10px; line-height: 1.5; }

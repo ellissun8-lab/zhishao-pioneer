@@ -109,3 +109,42 @@ export type CVSceneResult = {
   risk_state?: RiskState
 }
 
+export type MLStatus = {
+  risk_available: boolean
+  policy_available: boolean
+  fallback_note: string | null
+  model_version?: string | null
+  episodes: number
+  train_rows: number
+  validation_rows: number
+  test_rows: number
+  test_risk_mae_10m: number | null
+  test_policy_macro_f1: number | null
+  synthetic_training: boolean
+}
+
+export type MLRecommendSimulation = {
+  strategy: Strategy
+  before_risk: number
+  after_risk: number
+  action_cost: number
+  utility: number
+}
+
+export type MLRecommend = {
+  recommendation: {
+    model: string
+    model_version: string | null
+    strategy: Strategy
+    probabilities: Record<string, number> | null
+    confidence: number | null
+    synthetic_training: boolean
+    note?: string
+  }
+  fallback: boolean
+  simulation: MLRecommendSimulation[]
+  best_by_simulation: Strategy
+  explanation: string
+  synthetic: boolean
+}
+

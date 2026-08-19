@@ -1,0 +1,130 @@
+{
+  "generated_at": "2026-08-19T08:57:49.349664+00:00",
+  "synthetic_training": true,
+  "dataset": {
+    "episodes": 120000,
+    "seed": 42,
+    "train_rows": 84000,
+    "validation_rows": 18000,
+    "test_rows": 18000,
+    "generation_duration_seconds": 110.73
+  },
+  "risk_model": {
+    "model_version": "risk_hgb_v1",
+    "test": {
+      "5m": {
+        "mae": 0.0934,
+        "rmse": 0.1268,
+        "r2": 1.0
+      },
+      "10m": {
+        "mae": 0.0912,
+        "rmse": 0.122,
+        "r2": 1.0
+      },
+      "30m": {
+        "mae": 0.0874,
+        "rmse": 0.1138,
+        "r2": 1.0
+      }
+    },
+    "baselines": {
+      "mean_predictor": {
+        "5m": {
+          "mae": 21.443,
+          "rmse": 25.1326,
+          "r2": -0.0001
+        },
+        "10m": {
+          "mae": 22.3584,
+          "rmse": 26.171,
+          "r2": -0.0001
+        },
+        "30m": {
+          "mae": 23.2761,
+          "rmse": 27.181,
+          "r2": -0.0001
+        }
+      },
+      "rule_predictor": {
+        "5m": {
+          "mae": 0.0,
+          "rmse": 0.0,
+          "r2": 1.0
+        },
+        "10m": {
+          "mae": 0.0,
+          "rmse": 0.0,
+          "r2": 1.0
+        },
+        "30m": {
+          "mae": 0.0,
+          "rmse": 0.0,
+          "r2": 1.0
+        }
+      }
+    },
+    "training_seconds": 6.78
+  },
+  "policy_model": {
+    "model_version": "policy_hgb_v1",
+    "test": {
+      "accuracy": 0.9947,
+      "macro_f1": 0.9911,
+      "weighted_f1": 0.9947,
+      "confusion_matrix": {
+        "labels": [
+          "none",
+          "warn",
+          "guide_leave",
+          "intervene"
+        ],
+        "matrix": [
+          [
+            696,
+            6,
+            0,
+            0
+          ],
+          [
+            19,
+            3074,
+            15,
+            0
+          ],
+          [
+            0,
+            25,
+            6630,
+            15
+          ],
+          [
+            0,
+            0,
+            16,
+            7504
+          ]
+        ]
+      }
+    },
+    "baselines": {
+      "majority_strategy": {
+        "strategy": "intervene",
+        "accuracy": 0.4178
+      },
+      "risk_threshold_heuristic": {
+        "definition": "risk>=60 或 (risk_object 且 risk>=40) -> intervene；crowd 且 risk>=25 -> guide_leave；risk>=15 -> warn；否则 none",
+        "accuracy": 0.4682
+      }
+    },
+    "training_seconds": 3.26
+  },
+  "performance": {
+    "risk_inference_latency_ms_per_record": 0.003672,
+    "policy_inference_latency_ms_per_record": 0.003142,
+    "artifact_sizes_bytes": {
+      "risk_forecast.joblib": 2833245,
+      "intervention_policy.joblib": 1255830
+    }
+  }
+}

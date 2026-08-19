@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api import agents, chat, city, events, perception, simulation, world
+from .api import agents, chat, city, events, ml, perception, simulation, world
 
 app = FastAPI(
     title="智哨先锋 API",
@@ -16,7 +16,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for route in (city.router, agents.router, events.router, world.router, simulation.router, chat.router, perception.router):
+for route in (city.router, agents.router, events.router, world.router, simulation.router, chat.router, perception.router, ml.router):
     app.include_router(route, prefix="/api")
 
 

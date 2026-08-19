@@ -13,4 +13,11 @@ frontend/dist/
 frontend/vite.config.js
 frontend/vite.config.d.ts
 .DS_Store
+# 大规模合成训练数据（120k parquet，可由脚本确定性重建：--episodes 120000 --seed 42）
+data/synthetic/*.parquet
+data/synthetic/generation_stats.json
+# 本地训练产物默认目录不跟踪；正式模型通过 models/ 目录随仓库发布
+models_smoke/
+data/models_smoke/
+data/synthetic_smoke/
 

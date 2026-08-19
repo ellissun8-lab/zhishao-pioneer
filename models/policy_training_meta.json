@@ -1,0 +1,9 @@
+{
+  "training_seconds": 3.26,
+  "train_rows": 84000,
+  "validation_macro_f1": 0.9925,
+  "params": {
+    "learning_rate": 0.06,
+    "max_iter": 300
+  }
+}

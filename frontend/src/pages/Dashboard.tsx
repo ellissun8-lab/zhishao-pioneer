@@ -8,6 +8,7 @@ import { PredictionPanel } from '../components/PredictionPanel'
 import { RiskChart } from '../components/RiskChart'
 import { RiskPanel } from '../components/RiskPanel'
 import { SimulationPanel } from '../components/SimulationPanel'
+import { TrainedModelsPanel } from '../components/TrainedModelsPanel'
 import { WorldStatePanel } from '../components/WorldStatePanel'
 import { useWorld } from '../stores/useWorld'
 import type { Agent, ChatMessage, CVSceneResult, SimulationResult, Strategy, Zone } from '../types'
@@ -183,6 +184,7 @@ export default function Dashboard() {
           <PredictionPanel currentRisk={world.risk_state.overall_score} />
         </div>
         <div className="right-column">
+          <TrainedModelsPanel />
           <CVDetectionPanel agents={agents} resetVersion={resetVersion} onComplete={handleCVDetection} />
           <SimulationPanel results={results} selected={strategy} busy={busy} onRun={runStrategy} onCompare={compareAll} />
           <ChatPanel messages={messages} busy={busy} onSend={sendMessage} />
