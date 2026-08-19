@@ -13,6 +13,7 @@ from threading import Lock
 
 import numpy as np
 
+from ..simulation.strategies import Strategy
 from .features import FEATURE_SCHEMA
 
 MODEL_DIR_ENV = "ZHISHAO_MODEL_DIR"
@@ -81,7 +82,11 @@ def _feature_vector(features: dict[str, float]) -> np.ndarray:
 
 
 def predict_risk(features: dict[str, float], horizon_minutes: int = 10) -> dict[str, object]:
-    """World State 特征 -> 训练模型风险预测（[0,100] 边界内）。"""
+    """World State 特征 -> 训练模型风险预测（[0,100] 边界内）。
+
+    回归模型没有 classification probability，不伪造 confidence；
+    只返回 prediction 与 test_mae（来自 models/metrics.json）。
+    """
     artifact = _artifact(RISK_ARTIFACT)
     if artifact is None:
         raise RuntimeError(FALLBACK_NOTE)
@@ -90,11 +95,15 @@ def predict_risk(features: dict[str, float], horizon_minutes: int = 10) -> dict[
     if model is None:
         raise ValueError(f"horizon {horizon_minutes}m 不在训练范围内: {list(artifact['models'])}")
     raw = float(model.predict(_feature_vector(features))[0])
+    metrics = get_metrics()
+    test_mae = metrics.get("risk_model", {}).get("test", {}).get(key, {}).get("mae")
     return {
         "model": "risk_forecast",
+        "model_type": type(model).__name__,
         "model_version": artifact["model_version"],
         "horizon_minutes": horizon_minutes,
         "prediction": round(min(100.0, max(0.0, raw)), 1),
+        "test_mae": test_mae,
         "input_features": {name: float(features[name]) for name in FEATURE_SCHEMA},
         "synthetic_training": True,
     }
@@ -106,15 +115,18 @@ def recommend_strategy(features: dict[str, float]) -> dict[str, object]:
     if artifact is None:
         raise RuntimeError(FALLBACK_NOTE)
     model = artifact["model"]
-    probabilities = model.predict_proba(_feature_vector(features))[0]
+    raw_probabilities = model.predict_proba(_feature_vector(features))[0]
     classes = [str(value) for value in model.classes_]
-    best_index = int(np.argmax(probabilities))
+    by_class = {label: float(probability) for label, probability in zip(classes, raw_probabilities)}
+    probabilities = {strategy.value: round(by_class.get(strategy.value, 0.0), 4) for strategy in Strategy}
+    best_index = int(np.argmax(raw_probabilities))
     return {
         "model": "intervention_policy",
+        "model_type": type(model).__name__,
         "model_version": artifact["model_version"],
         "strategy": classes[best_index],
-        "probabilities": {label: round(float(probability), 4) for label, probability in zip(classes, probabilities)},
-        "confidence": round(float(probabilities[best_index]), 4),
+        "probabilities": probabilities,
+        "confidence": round(float(raw_probabilities[best_index]), 4),
         "input_features": {name: float(features[name]) for name in FEATURE_SCHEMA},
         "synthetic_training": True,
     }
@@ -132,6 +144,10 @@ def status() -> dict[str, object]:
         "policy_available": policy_available,
         "fallback_note": None if risk_available and policy_available else FALLBACK_NOTE,
         "model_version": metrics.get("risk_model", {}).get("model_version"),
+        "risk_model_version": metrics.get("risk_model_version") or metrics.get("risk_model", {}).get("model_version"),
+        "policy_model_version": metrics.get("policy_model_version") or metrics.get("policy_model", {}).get("model_version"),
+        "feature_schema_version": metrics.get("feature_schema_version"),
+        "training_run": metrics.get("training_run"),
         "episodes": dataset.get("episodes", 0),
         "train_rows": dataset.get("train_rows", 0),
         "validation_rows": dataset.get("validation_rows", 0),

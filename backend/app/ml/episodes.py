@@ -170,18 +170,31 @@ def compute_labels(state: WorldState, intervention_cost_weight: float = DEFAULT_
     return {**risk_labels, **{f"utility_{key}": value for key, value in utilities.items()}, "best_strategy": best_strategy}
 
 
+def dominant_behavior(state: WorldState) -> str:
+    """主导行为状态：计数并列时按名称排序决出，禁止依赖 set 迭代顺序。
+
+    set 迭代顺序受字符串哈希随机化（PYTHONHASHSEED）影响，
+    会导致同一 seed 跨进程生成不同的 dominant_behavior（deterministic hash 不稳定）。
+    """
+    counts: dict[str, int] = {}
+    for agent in state.agents.values():
+        counts[agent.behavior_state.value] = counts.get(agent.behavior_state.value, 0) + 1
+    if not counts:
+        return "idle"
+    return sorted(counts.items(), key=lambda item: (-item[1], item[0]))[0][0]
+
+
 def make_episode_record(episode_id: int, state: WorldState, intervention_cost_weight: float) -> dict[str, object]:
     features = extract_features(state)
     labels = compute_labels(state, intervention_cost_weight)
     event_types = ",".join(sorted({event.type.value for event in state.active_events}))
-    dominant_behavior = max({agent.behavior_state.value for agent in state.agents.values()}, key=lambda value: sum(1 for a in state.agents.values() if a.behavior_state.value == value)) if state.agents else "idle"
     return {
         "episode_id": episode_id,
         "synthetic": True,
         "archetype": "",
         "split": "",
         "event_types": event_types,
-        "dominant_behavior": dominant_behavior,
+        "dominant_behavior": dominant_behavior(state),
         **features,
         **labels,
     }
@@ -200,22 +213,58 @@ def split_plan(episodes: int, seed: int = DEFAULT_SEED) -> np.ndarray:
     return splits
 
 
+def feature_fingerprint(features: dict[str, float]) -> str:
+    """特征向量指纹：sha256(canonical feature vector)。
+
+    只含 FEATURE_SCHEMA 顺序的数值（固定位数序列化），
+    不包含 episode_id 等任何标识，用于生成期 feature-level 去重。
+    """
+    import hashlib
+
+    canonical = json.dumps(
+        [float(features[name]) for name in FEATURE_SCHEMA],
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 def iter_episode_records(
     episodes: int,
     seed: int = DEFAULT_SEED,
     intervention_cost_weight: float = DEFAULT_INTERVENTION_COST_WEIGHT,
+    enforce_unique_features: bool = True,
+    runtime_stats: dict[str, int] | None = None,
 ) -> Iterator[dict[str, object]]:
-    """流式生成 episode 记录；每次只保留当前记录，支持 12 万级规模。"""
+    """流式生成 episode 记录；每次只保留当前记录，支持 12 万级规模。
+
+    enforce_unique_features：维护特征指纹集合（仅 sha256 指纹，不保存
+    WorldState），发现重复 feature vector 时重新采样该 episode，
+    保证 120k 数据集 0 条重复特征。重采样确定性消耗同一 rng 流，
+    同 seed 跨进程结果一致。
+    """
     rng = np.random.default_rng(seed)
     archetype_index = np.random.default_rng(seed + 1)
     splits = split_plan(episodes, seed)
+    seen: set[str] = set()
+    resamples = 0
     for episode_id in range(episodes):
         archetype = ARCHETYPES[int(archetype_index.integers(0, len(ARCHETYPES)))]
-        state = build_state(rng, archetype)
-        record = make_episode_record(episode_id, state, intervention_cost_weight)
+        while True:
+            state = build_state(rng, archetype)
+            record = make_episode_record(episode_id, state, intervention_cost_weight)
+            if not enforce_unique_features:
+                break
+            fingerprint = feature_fingerprint({name: record[name] for name in FEATURE_SCHEMA})
+            if fingerprint not in seen:
+                seen.add(fingerprint)
+                break
+            resamples += 1
         record["archetype"] = archetype
         record["split"] = str(splits[episode_id])
         yield record
+    if runtime_stats is not None:
+        runtime_stats["feature_resample_count"] = resamples
+        runtime_stats["duplicate_feature_rows"] = 0 if enforce_unique_features else -1
 
 
 @dataclass
@@ -259,7 +308,10 @@ class DistributionStats:
 
 
 def canonical_record_hash(records: list[dict[str, object]]) -> str:
-    """对记录列表做确定性 sha256（sort_keys + 紧凑分隔符），用于复现性校验。"""
+    """对记录列表做确定性 sha256（sort_keys + 紧凑分隔符）。
+
+    跨进程稳定：不使用 Python 内建 hash()，且不依赖 set/dict 迭代顺序。
+    """
     import hashlib
 
     payload = json.dumps(records, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)

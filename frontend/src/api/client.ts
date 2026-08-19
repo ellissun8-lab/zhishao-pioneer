@@ -1,4 +1,4 @@
-import type { CVSceneResult, MLRecommend, MLStatus, Prediction, SimulationResult, Strategy, WorldState } from '../types'
+import type { CVSceneResult, MLRecommend, MLRiskPrediction, MLStatus, Prediction, SimulationResult, Strategy, WorldState } from '../types'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
@@ -42,4 +42,9 @@ export const api = {
     request<{ answer: string }>('/api/chat', { method: 'POST', body: JSON.stringify({ message }) }),
   getMLStatus: () => request<MLStatus>('/api/ml/status'),
   getMLRecommend: () => request<MLRecommend>('/api/ml/recommend'),
+  predictMLRisk: (horizonMinutes: number) =>
+    request<MLRiskPrediction>('/api/ml/predict-risk', {
+      method: 'POST',
+      body: JSON.stringify({ horizon_minutes: horizonMinutes }),
+    }),
 }

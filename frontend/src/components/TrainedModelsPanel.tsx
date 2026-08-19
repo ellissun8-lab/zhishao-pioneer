@@ -1,16 +1,24 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api/client'
-import type { MLRecommend, MLStatus } from '../types'
+import type { MLRecommend, MLRiskPrediction, MLStatus } from '../types'
+
+const ML_PREDICT_HORIZON_MINUTES = 10
 
 function formatCount(value: number): string {
   return value.toLocaleString('zh-Hans-CN')
+}
+
+function formatConfidence(confidence: number): string {
+  return `${(confidence * 100).toFixed(1)}%`
 }
 
 export function TrainedModelsPanel() {
   const [status, setStatus] = useState<MLStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [recommend, setRecommend] = useState<MLRecommend | null>(null)
+  const [mlPrediction, setMLPrediction] = useState<MLRiskPrediction | null>(null)
   const [busy, setBusy] = useState(false)
+  const [predicting, setPredicting] = useState(false)
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -24,6 +32,18 @@ export function TrainedModelsPanel() {
   useEffect(() => {
     void refreshStatus()
   }, [refreshStatus])
+
+  async function requestMLPrediction() {
+    setPredicting(true)
+    try {
+      setMLPrediction(await api.predictMLRisk(ML_PREDICT_HORIZON_MINUTES))
+      setError(null)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'ML 预测失败')
+    } finally {
+      setPredicting(false)
+    }
+  }
 
   async function requestRecommendation() {
     setBusy(true)
@@ -62,11 +82,11 @@ export function TrainedModelsPanel() {
           <div className="ml-metrics">
             <div>
               <span>TEST MAE · 10MIN</span>
-              <strong>{status.test_risk_mae_10m === null ? '—' : status.test_risk_mae_10m.toFixed(2)}</strong>
+              <strong>{status.test_risk_mae_10m === null ? '-' : status.test_risk_mae_10m.toFixed(2)}</strong>
             </div>
             <div>
               <span>POLICY MACRO-F1</span>
-              <strong>{status.test_policy_macro_f1 === null ? '—' : status.test_policy_macro_f1.toFixed(4)}</strong>
+              <strong>{status.test_policy_macro_f1 === null ? '-' : status.test_policy_macro_f1.toFixed(4)}</strong>
             </div>
           </div>
           {modelsReady ? (
@@ -74,6 +94,32 @@ export function TrainedModelsPanel() {
           ) : (
             <p className="ml-note fallback">{status.fallback_note ?? 'ML model unavailable, using transparent rule-based fallback.'}</p>
           )}
+          <button type="button" className="compare-button" onClick={() => void requestMLPrediction()} disabled={predicting}>
+            {predicting ? 'ML 预测中…' : `ML预测未来${ML_PREDICT_HORIZON_MINUTES}分钟`}
+          </button>
+          {mlPrediction ? (
+            <div className="ml-prediction">
+              <div className="ml-prediction-head">
+                <span>{mlPrediction.fallback ? '规则模型回退' : 'ML 风险预测'}</span>
+                <strong className={mlPrediction.fallback ? 'fallback' : ''}>
+                  未来{mlPrediction.horizon_minutes}分钟：{mlPrediction.prediction.toFixed(1)}
+                </strong>
+              </div>
+              <dl>
+                <div><dt>模型类型</dt><dd>{mlPrediction.model_type}</dd></div>
+                <div><dt>模型版本</dt><dd>{mlPrediction.model_version ?? 'rule fallback'}</dd></div>
+                <div><dt>训练数据</dt><dd>{formatCount(status.episodes)} Synthetic Episodes</dd></div>
+                <div>
+                  <dt>状态</dt>
+                  <dd className={mlPrediction.fallback ? 'fallback' : ''}>
+                    {mlPrediction.fallback ? 'Rule Fallback' : 'ML Model'}
+                    {mlPrediction.test_mae != null ? ` · Test MAE ${mlPrediction.test_mae}` : ''}
+                  </dd>
+                </div>
+              </dl>
+              {mlPrediction.fallback ? <p className="ml-note fallback">{mlPrediction.note ?? 'ML model unavailable, using transparent rule-based fallback.'}</p> : null}
+            </div>
+          ) : null}
           <button type="button" className="compare-button" onClick={() => void requestRecommendation()} disabled={busy}>
             {busy ? '正在推荐…' : '模型推荐 + What-if 验证'}
           </button>
@@ -81,8 +127,15 @@ export function TrainedModelsPanel() {
             <div className="ml-recommend">
               <div className="ml-recommend-head">
                 <span>推荐策略：<b>{recommend.recommendation.strategy}</b></span>
-                {recommend.recommendation.confidence !== null ? <span>置信度 {(recommend.recommendation.confidence * 100).toFixed(1)}%</span> : null}
+                {recommend.recommendation.confidence !== null ? <span>置信度 {formatConfidence(recommend.recommendation.confidence)}</span> : null}
               </div>
+              {recommend.recommendation.probabilities ? (
+                <div className="ml-probabilities">
+                  {Object.entries(recommend.recommendation.probabilities).map(([label, probability]) => (
+                    <span key={label}>{label} {(probability * 100).toFixed(1)}%</span>
+                  ))}
+                </div>
+              ) : null}
               <div className="comparison-bars">
                 {recommend.simulation.map((item) => (
                   <div key={item.strategy}>

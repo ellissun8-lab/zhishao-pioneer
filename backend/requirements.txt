@@ -4,7 +4,9 @@ pydantic>=2.10,<3
 sqlalchemy>=2.0,<3
 pytest>=8.3,<9
 httpx>=0.28,<1
-numpy>=1.26,<3
-scikit-learn>=1.5,<2
-pyarrow>=16,<21
+# Synthetic ML Pipeline 依赖（fresh clone 可复现安装；与提交的 models/ 训练环境一致）
+numpy==2.4.6
+scikit-learn==1.9.0
+pyarrow==24.0.0
+joblib==1.5.3
 

@@ -195,6 +195,18 @@ button:disabled { opacity: .45; cursor: wait; }
 .ml-recommend { margin: 0 10px; padding-top: 7px; border-top: 1px dashed #233537; }
 .ml-recommend-head { display: flex; justify-content: space-between; color: #899b9c; font-size: 9px; }
 .ml-recommend-head b { color: #8ce2cf; }
+.ml-probabilities { display: flex; flex-wrap: wrap; gap: 4px; padding: 7px 0 2px; }
+.ml-probabilities span { padding: 3px 6px; color: #77918d; background: #0d1a1c; border: 1px solid #213638; font: 8px ui-monospace, monospace; }
+.ml-prediction { margin: 7px 10px; padding: 8px 9px; background: #0c1719; border: 1px solid #203133; }
+.ml-prediction-head { display: flex; justify-content: space-between; align-items: baseline; }
+.ml-prediction-head span { color: #617476; font-size: 9px; letter-spacing: .08em; }
+.ml-prediction-head strong { color: #e2b369; font: 700 15px ui-monospace, monospace; }
+.ml-prediction-head strong.fallback { color: #ff8c79; }
+.ml-prediction dl { margin: 6px 0 0; display: grid; gap: 3px; }
+.ml-prediction dl div { display: grid; grid-template-columns: 56px 1fr; gap: 6px; }
+.ml-prediction dt { color: #546769; font: 8px ui-monospace, monospace; letter-spacing: .08em; }
+.ml-prediction dd { margin: 0; color: #aebfbd; font: 9px ui-monospace, monospace; }
+.ml-prediction dd.fallback { color: #e2b369; }
 .ml-explanation { margin: 6px 0 7px; color: #778a8c; font-size: 9px; line-height: 1.6; }
 .chat-panel { display: grid; grid-template-rows: 39px 1fr auto auto; min-height: 265px; }
 .chat-messages { min-height: 90px; max-height: 230px; overflow: auto; padding: 10px; }

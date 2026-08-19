@@ -1,9 +1,11 @@
-"""ML 训练模型 API：状态展示 + 模型推荐（必须经 What-if Simulation 验证）。"""
+"""ML 训练模型 API：状态展示 + 运行态风险预测 + 模型推荐（必须经 What-if Simulation 验证）。"""
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
 
+from ..behavior.prediction import predict_world_state
 from ..ml import registry
 from ..ml.episodes import DEFAULT_INTERVENTION_COST_WEIGHT
 from ..ml.features import extract_features
@@ -13,10 +15,47 @@ from ..simulation.engine import SimulationEngine
 router = APIRouter(prefix="/ml", tags=["ml"])
 
 
+class PredictRiskRequest(BaseModel):
+    horizon_minutes: int = Field(default=10, ge=1, le=60)
+    use_current_world_state: bool = True
+
+
 @router.get("/status")
 def ml_status() -> dict[str, object]:
     """训练模型状态与 test 指标（读取 models/metrics.json，前端禁止写死数字）。"""
     return registry.status()
+
+
+@router.post("/predict-risk")
+def ml_predict_risk(request: PredictRiskRequest) -> dict[str, object]:
+    """运行态 ML 风险预测：Current World State -> features.py -> risk_forecast.joblib。
+
+    这是独立于规则 World Behavior Model 的第二条预测路径；
+    模型缺失时透明回退规则预测（fallback=true，fallback_source=rule_world_behavior_model），
+    绝不把规则输出伪装成 ML 输出。
+    """
+    state = world_service.state
+    features = extract_features(state)
+    horizon = request.horizon_minutes
+    if horizon not in {5, 10, 30}:
+        raise HTTPException(status_code=400, detail="horizon_minutes must be one of 5, 10, 30")
+    if registry.risk_model_available():
+        result = registry.predict_risk(features, horizon)
+        return {**result, "fallback": False}
+    prediction = predict_world_state(state, horizon)
+    return {
+        "model": prediction.model,
+        "model_type": "TransparentRuleWorldBehaviorModel",
+        "model_version": None,
+        "horizon_minutes": horizon,
+        "prediction": prediction.risk_score,
+        "input_features": features,
+        "synthetic_training": False,
+        "fallback": True,
+        "fallback_source": "rule_world_behavior_model",
+        "test_mae": None,
+        "note": registry.FALLBACK_NOTE,
+    }
 
 
 @router.get("/recommend")

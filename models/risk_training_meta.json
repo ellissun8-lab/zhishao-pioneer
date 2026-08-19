@@ -1,9 +1,9 @@
 {
-  "training_seconds": 6.78,
+  "training_seconds": 5.74,
   "train_rows": 84000,
   "validation_metrics": {
     "5m": {
-      "validation_mae": 0.0935,
+      "validation_mae": 0.094,
       "params": {
         "learning_rate": 0.06,
         "max_iter": 300
@@ -17,7 +17,7 @@
       }
     },
     "30m": {
-      "validation_mae": 0.0881,
+      "validation_mae": 0.088,
       "params": {
         "learning_rate": 0.06,
         "max_iter": 300

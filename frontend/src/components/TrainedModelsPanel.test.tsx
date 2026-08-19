@@ -3,10 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { TrainedModelsPanel } from './TrainedModelsPanel'
 import { api } from '../api/client'
-import type { MLRecommend, MLStatus } from '../types'
+import type { MLRecommend, MLRiskPrediction, MLStatus } from '../types'
 
 vi.mock('../api/client', () => ({
-  api: { getMLStatus: vi.fn(), getMLRecommend: vi.fn() },
+  api: { getMLStatus: vi.fn(), getMLRecommend: vi.fn(), predictMLRisk: vi.fn() },
 }))
 
 const loadedStatus: MLStatus = {
@@ -57,9 +57,36 @@ const recommend: MLRecommend = {
   synthetic: true,
 }
 
+const mlPrediction: MLRiskPrediction = {
+  model: 'risk_forecast',
+  model_type: 'HistGradientBoostingRegressor',
+  model_version: 'risk_hgb_v1',
+  horizon_minutes: 10,
+  prediction: 79.4,
+  test_mae: 0.0912,
+  input_features: { current_risk: 62 },
+  synthetic_training: true,
+  fallback: false,
+}
+
+const fallbackPrediction: MLRiskPrediction = {
+  model: 'transparent_rule_probability_v1',
+  model_type: 'TransparentRuleWorldBehaviorModel',
+  model_version: null,
+  horizon_minutes: 10,
+  prediction: 82,
+  test_mae: null,
+  input_features: { current_risk: 62 },
+  synthetic_training: false,
+  fallback: true,
+  fallback_source: 'rule_world_behavior_model',
+  note: 'ML model unavailable, using transparent rule-based fallback.',
+}
+
 beforeEach(() => {
   vi.mocked(api.getMLStatus).mockReset()
   vi.mocked(api.getMLRecommend).mockReset()
+  vi.mocked(api.predictMLRisk).mockReset()
 })
 
 afterEach(() => cleanup())
@@ -94,6 +121,32 @@ describe('TrainedModelsPanel', () => {
     expect(screen.getAllByText(/置信度 80\.0%/)).toHaveLength(2)
     expect(screen.getByText(/What-if 仿真验证/)).toBeTruthy()
     await waitFor(() => expect(api.getMLRecommend).toHaveBeenCalledTimes(1))
+  })
+
+  it('runs a real ML prediction path and renders model metadata from the API', async () => {
+    vi.mocked(api.getMLStatus).mockResolvedValue(loadedStatus)
+    vi.mocked(api.predictMLRisk).mockResolvedValue(mlPrediction)
+    render(<TrainedModelsPanel />)
+    fireEvent.click(await screen.findByRole('button', { name: 'ML预测未来10分钟' }))
+    expect(await screen.findByText('未来10分钟：79.4')).toBeTruthy()
+    expect(screen.getByText('HistGradientBoostingRegressor')).toBeTruthy()
+    expect(screen.getByText('risk_hgb_v1')).toBeTruthy()
+    expect(screen.getByText(/ML Model · Test MAE 0\.0912/)).toBeTruthy()
+    await waitFor(() => expect(api.predictMLRisk).toHaveBeenCalledWith(10))
+  })
+
+  it('labels rule fallback explicitly when the trained model is unavailable', async () => {
+    vi.mocked(api.getMLStatus).mockResolvedValue(fallbackStatus)
+    vi.mocked(api.predictMLRisk).mockResolvedValue(fallbackPrediction)
+    render(<TrainedModelsPanel />)
+    fireEvent.click(await screen.findByRole('button', { name: 'ML预测未来10分钟' }))
+    expect(await screen.findByText('未来10分钟：82.0')).toBeTruthy()
+    expect(screen.getByText('规则模型回退')).toBeTruthy()
+    expect(screen.queryByText('ML 风险预测')).toBeNull()
+    expect(screen.getByText('TransparentRuleWorldBehaviorModel')).toBeTruthy()
+    expect(screen.getByText('rule fallback')).toBeTruthy()
+    expect(screen.getByText('Rule Fallback')).toBeTruthy()
+    expect(screen.getAllByText(/transparent rule-based fallback/).length).toBeGreaterThan(0)
   })
 
   it('surfaces status loading errors without crashing', async () => {

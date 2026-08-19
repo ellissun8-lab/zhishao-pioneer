@@ -123,6 +123,20 @@ export type MLStatus = {
   synthetic_training: boolean
 }
 
+export type MLRiskPrediction = {
+  model: string
+  model_type: string
+  model_version: string | null
+  horizon_minutes: number
+  prediction: number
+  test_mae?: number | null
+  input_features: Record<string, number>
+  synthetic_training: boolean
+  fallback: boolean
+  fallback_source?: string | null
+  note?: string | null
+}
+
 export type MLRecommendSimulation = {
   strategy: Strategy
   before_risk: number
@@ -134,6 +148,7 @@ export type MLRecommendSimulation = {
 export type MLRecommend = {
   recommendation: {
     model: string
+    model_type?: string
     model_version: string | null
     strategy: Strategy
     probabilities: Record<string, number> | null
@@ -147,4 +162,3 @@ export type MLRecommend = {
   explanation: string
   synthetic: boolean
 }
-

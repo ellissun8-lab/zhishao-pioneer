@@ -1,5 +1,6 @@
 from ..behavior.prediction import predict_world_state
 from ..ml import registry
+from ..ml.episodes import DEFAULT_INTERVENTION_COST_WEIGHT
 from ..ml.features import extract_features
 from ..simulation.engine import SimulationEngine
 from ..simulation.strategies import Strategy
@@ -40,12 +41,15 @@ class AgentTools:
             prediction = predict_world_state(self.state, horizon_minutes)
             return {
                 "model": prediction.model,
+                "model_type": "TransparentRuleWorldBehaviorModel",
                 "model_version": None,
                 "horizon_minutes": horizon_minutes,
                 "prediction": prediction.risk_score,
                 "input_features": features,
                 "synthetic_training": False,
                 "fallback": True,
+                "fallback_source": "rule_world_behavior_model",
+                "test_mae": None,
                 "note": registry.FALLBACK_NOTE,
             }
         return registry.predict_risk(features, horizon_minutes)
@@ -55,7 +59,14 @@ class AgentTools:
         features = extract_features(self.state)
         if not registry.policy_model_available():
             results = self.compare_strategies()
-            best = min(results, key=lambda result: result.after.risk)
+            best = max(
+                results,
+                key=lambda result: (
+                    result.before.risk
+                    - result.after.risk
+                    - DEFAULT_INTERVENTION_COST_WEIGHT * result.action_cost
+                ),
+            )
             return {
                 "model": "rule_compare",
                 "model_version": None,

@@ -1,19 +1,28 @@
 """Synthetic Training Pipeline 测试。
 
 覆盖：生成可复现、标签来自仿真、特征无身份泄漏、切分隔离、
-预测边界、策略合法、Agent 工具接地（grounding）、无模型回退、全量 synthetic。
+预测边界、策略合法、Agent 工具接地（grounding）、无模型回退、全量 synthetic、
+跨进程 hash 稳定、特征向量唯一、Agent 运行态 ML 调用链。
 """
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
+from pathlib import Path
+
 import numpy as np
 import pytest
 import joblib
+from fastapi.testclient import TestClient
 from sklearn.ensemble import HistGradientBoostingClassifier, HistGradientBoostingRegressor
 
 from backend.app.data.seed import create_demo_state
 from backend.app.behavior.prediction import predict_world_state
+from backend.app.llm.agent import explain_question
 from backend.app.llm.tools import AgentTools
+from backend.app.main import app
 from backend.app.ml import registry
 from backend.app.ml.episodes import (
     ARCHETYPES,
@@ -26,10 +35,12 @@ from backend.app.ml.episodes import (
     split_plan,
 )
 from backend.app.ml.features import FEATURE_SCHEMA, FORBIDDEN_FEATURE_TOKENS, extract_features
+from backend.app.service import world_service
 from backend.app.simulation.engine import SimulationEngine
 from backend.app.simulation.strategies import Strategy
 
 VALID_STRATEGIES = {strategy.value for strategy in Strategy}
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _records(episodes: int, seed: int) -> list[dict[str, object]]:
@@ -139,6 +150,7 @@ def test_policy_model_valid_strategy(trained_models):
         features = {name: float(record[name]) for name in FEATURE_SCHEMA}
         result = registry.recommend_strategy(features)
         assert result["strategy"] in VALID_STRATEGIES
+        assert set(result["probabilities"]) == set(VALID_STRATEGIES)
         assert abs(sum(result["probabilities"].values()) - 1.0) < 0.005  # 概率各自保留 4 位小数
         assert 0.0 <= result["confidence"] <= 1.0
         assert result["synthetic_training"] is True
@@ -173,7 +185,10 @@ def test_ml_fallback_without_model(no_models):
     recommendation = tools.ml_recommend_strategy()
     assert recommendation["fallback"] is True
     assert "ML model unavailable" in recommendation["note"]
-    best = min(SimulationEngine().compare(state), key=lambda result: result.after.risk)
+    best = max(
+        SimulationEngine().compare(state),
+        key=lambda result: result.before.risk - result.after.risk - DEFAULT_INTERVENTION_COST_WEIGHT * result.action_cost,
+    )
     assert recommendation["strategy"] == best.strategy.value
     status = registry.status()
     assert status["risk_available"] is False and status["policy_available"] is False
@@ -197,3 +212,144 @@ def test_training_data_all_synthetic(tmp_path):
     reloaded = pq.read_table(path).to_pylist()
     assert all(row["synthetic"] is True for row in reloaded)
     assert all(row["best_strategy"] in VALID_STRATEGIES for row in reloaded)
+
+
+# ---------- Codex ML Validation 修复：跨进程 hash / 特征唯一 / Agent ML 调用链 ----------
+
+_HASH_SNIPPET = (
+    "import sys; sys.path.insert(0, {root!r}); "
+    "from backend.app.ml.episodes import canonical_record_hash, iter_episode_records; "
+    "print(canonical_record_hash(list(iter_episode_records(60, seed=42))))"
+)
+
+
+def _subprocess_hash(python_hash_seed: str) -> str:
+    env = {**os.environ, "PYTHONHASHSEED": python_hash_seed}
+    result = subprocess.run(
+        [sys.executable, "-c", _HASH_SNIPPET.format(root=str(PROJECT_ROOT))],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=str(PROJECT_ROOT),
+        timeout=180,
+    )
+    assert result.returncode == 0, result.stderr
+    return result.stdout.strip()
+
+
+def test_dataset_hash_stable_across_processes():
+    """同一 seed 在不同 PYTHONHASHSEED 的独立进程中必须产生相同 deterministic hash。
+
+    旧实现 dominant_behavior 用 max(set, ...)，平局时依赖 set 迭代顺序
+    （受字符串哈希随机化影响），跨进程不稳定；此处直接回归。
+    """
+    hashes = [_subprocess_hash(seed) for seed in ("1", "2", "20260819")]
+    assert hashes[0] == hashes[1] == hashes[2]
+    assert len(hashes[0]) == 64
+
+
+def test_generated_feature_vectors_unique():
+    """生成期 feature-level 唯一性 guard：全部特征向量（16 维）互不相同。"""
+    records = _records(2000, seed=DEFAULT_SEED)
+    vectors = {tuple(float(record[name]) for name in FEATURE_SCHEMA) for record in records}
+    assert len(vectors) == len(records), f"存在重复 feature vector: {len(records) - len(vectors)} 条"
+
+
+def test_agent_calls_ml_predict_risk(trained_models):
+    state = create_demo_state(10)
+    response = explain_question("训练模型认为未来10分钟风险多少？", state)
+    assert response["tools_used"] == ["ml_predict_risk"]
+    prediction = response["ml_prediction"]
+    assert prediction["model"] == "risk_forecast"
+    assert prediction["model_version"] == "risk_test_v1"
+    assert prediction["synthetic_training"] is True
+    assert prediction.get("fallback") is None
+    assert f"{prediction['prediction']:.1f}" in response["answer"]
+    assert "risk_test_v1" in response["answer"]
+
+
+def test_agent_calls_ml_recommend_strategy(trained_models):
+    state = create_demo_state(10)
+    response = explain_question("模型建议采取什么措施？", state)
+    assert "ml_recommend_strategy" in response["tools_used"]
+    recommendation = response["ml_recommendation"]
+    assert recommendation["model"] == "intervention_policy"
+    assert recommendation["model_version"] == "policy_test_v1"
+    assert recommendation["strategy"] in VALID_STRATEGIES
+
+
+def test_agent_strategy_explanation_contains_probability(trained_models):
+    state = create_demo_state(10)
+    response = explain_question("模型建议采取什么措施？", state)
+    answer = response["answer"]
+    assert "模型概率/置信度" in answer
+    assert "四策略概率" in answer
+    assert "%" in answer
+    recommendation = response["ml_recommendation"]
+    assert recommendation["confidence"] == max(recommendation["probabilities"].values())
+    # 不得宣称现实世界概率
+    assert "现实世界最佳措施概率" in answer
+
+
+def test_agent_ml_recommendation_then_simulation(trained_models):
+    """推荐流程必须是 ml_recommend_strategy -> What-if 仿真二次验证，顺序可验证。"""
+    state = create_demo_state(10)
+    response = explain_question("模型建议采取什么措施？", state)
+    assert response["tools_used"] == ["ml_recommend_strategy", "compare_strategies"]
+    answer = response["answer"]
+    assert "What-if 仿真验证" in answer
+    assert "模型推荐" in answer
+    # 仿真数字必须来自 compare_strategies 的真实结果
+    simulations = SimulationEngine().compare(state)
+    for result in simulations:
+        assert f"{result.after.risk:.1f}" in answer
+
+
+def test_agent_does_not_label_rule_prediction_as_ml(no_models):
+    state = create_demo_state(8)
+    # 显式问 ML：模型缺失时必须说明回退，不得把规则输出伪装成 ML 输出
+    ml_answer = explain_question("训练模型认为未来10分钟风险多少？", state)
+    assert ml_answer["tools_used"] == ["ml_predict_risk"]
+    assert "ML 模型不可用" in ml_answer["answer"]
+    assert "规则世界模型" in ml_answer["answer"]
+    assert ml_answer["ml_prediction"]["fallback"] is True
+    # 普通预测问题走规则路径，且必须声明非 ML
+    rule_answer = explain_question("未来10分钟会怎样？", state)
+    assert rule_answer["tools_used"] == ["predict_future"]
+    assert "规则世界模型" in rule_answer["answer"]
+    assert "非 ML 模型" in rule_answer["answer"]
+
+
+def test_ml_predict_risk_api(trained_models):
+    """POST /api/ml/predict-risk：World State -> features -> joblib 模型。"""
+    world_service.reset()
+    client = TestClient(app)
+    response = client.post("/api/ml/predict-risk", json={"horizon_minutes": 10})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["model"] == "risk_forecast"
+    assert payload["model_type"] == "HistGradientBoostingRegressor"
+    assert payload["model_version"] == "risk_test_v1"
+    assert payload["horizon_minutes"] == 10
+    assert 0.0 <= payload["prediction"] <= 100.0
+    assert payload["synthetic_training"] is True
+    assert payload["fallback"] is False
+    assert set(payload["input_features"]) == set(FEATURE_SCHEMA)
+    # 与直接调用 registry 的结果一致（同一 World State -> 同一特征 -> 同一模型）
+    expected = registry.predict_risk(extract_features(world_service.state), 10)
+    assert payload["prediction"] == expected["prediction"]
+    # 非法 horizon 拒绝
+    assert client.post("/api/ml/predict-risk", json={"horizon_minutes": 15}).status_code == 400
+
+
+def test_ml_predict_risk_api_fallback(no_models):
+    world_service.reset()
+    client = TestClient(app)
+    response = client.post("/api/ml/predict-risk", json={"horizon_minutes": 10, "use_current_world_state": True})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["fallback"] is True
+    assert payload["model_type"] == "TransparentRuleWorldBehaviorModel"
+    assert payload["fallback_source"] == "rule_world_behavior_model"
+    assert payload["synthetic_training"] is False
+    assert payload["prediction"] == predict_world_state(world_service.state, 10).risk_score

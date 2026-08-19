@@ -1,48 +1,54 @@
 {
-  "generated_at": "2026-08-19T08:57:49.349664+00:00",
+  "generated_at": "2026-08-19T10:53:49.640204+00:00",
   "synthetic_training": true,
+  "training_run": "synthetic_ep120000_seed42",
+  "dataset_seed": 42,
+  "dataset_episodes": 120000,
+  "feature_schema_version": "v1",
+  "risk_model_version": "risk_hgb_v1",
+  "policy_model_version": "policy_hgb_v1",
   "dataset": {
     "episodes": 120000,
     "seed": 42,
     "train_rows": 84000,
     "validation_rows": 18000,
     "test_rows": 18000,
-    "generation_duration_seconds": 110.73
+    "generation_duration_seconds": 88.93
   },
   "risk_model": {
     "model_version": "risk_hgb_v1",
     "test": {
       "5m": {
-        "mae": 0.0934,
-        "rmse": 0.1268,
+        "mae": 0.0944,
+        "rmse": 0.1276,
         "r2": 1.0
       },
       "10m": {
-        "mae": 0.0912,
-        "rmse": 0.122,
+        "mae": 0.0917,
+        "rmse": 0.1223,
         "r2": 1.0
       },
       "30m": {
-        "mae": 0.0874,
-        "rmse": 0.1138,
+        "mae": 0.088,
+        "rmse": 0.1145,
         "r2": 1.0
       }
     },
     "baselines": {
       "mean_predictor": {
         "5m": {
-          "mae": 21.443,
-          "rmse": 25.1326,
+          "mae": 21.4686,
+          "rmse": 25.1309,
           "r2": -0.0001
         },
         "10m": {
-          "mae": 22.3584,
-          "rmse": 26.171,
+          "mae": 22.3851,
+          "rmse": 26.1662,
           "r2": -0.0001
         },
         "30m": {
-          "mae": 23.2761,
-          "rmse": 27.181,
+          "mae": 23.3033,
+          "rmse": 27.1756,
           "r2": -0.0001
         }
       },
@@ -64,14 +70,14 @@
         }
       }
     },
-    "training_seconds": 6.78
+    "training_seconds": 5.74
   },
   "policy_model": {
     "model_version": "policy_hgb_v1",
     "test": {
-      "accuracy": 0.9947,
-      "macro_f1": 0.9911,
-      "weighted_f1": 0.9947,
+      "accuracy": 0.9969,
+      "macro_f1": 0.9942,
+      "weighted_f1": 0.9969,
       "confusion_matrix": {
         "labels": [
           "none",
@@ -81,28 +87,28 @@
         ],
         "matrix": [
           [
-            696,
-            6,
+            679,
+            3,
             0,
             0
           ],
           [
-            19,
-            3074,
-            15,
+            18,
+            3146,
+            0,
             0
           ],
           [
             0,
-            25,
-            6630,
-            15
+            0,
+            6595,
+            25
           ],
           [
             0,
             0,
-            16,
-            7504
+            9,
+            7525
           ]
         ]
       }
@@ -110,21 +116,21 @@
     "baselines": {
       "majority_strategy": {
         "strategy": "intervene",
-        "accuracy": 0.4178
+        "accuracy": 0.4186
       },
       "risk_threshold_heuristic": {
         "definition": "risk>=60 或 (risk_object 且 risk>=40) -> intervene；crowd 且 risk>=25 -> guide_leave；risk>=15 -> warn；否则 none",
-        "accuracy": 0.4682
+        "accuracy": 0.4681
       }
     },
-    "training_seconds": 3.26
+    "training_seconds": 2.81
   },
   "performance": {
-    "risk_inference_latency_ms_per_record": 0.003672,
-    "policy_inference_latency_ms_per_record": 0.003142,
+    "risk_inference_latency_ms_per_record": 0.003875,
+    "policy_inference_latency_ms_per_record": 0.002797,
     "artifact_sizes_bytes": {
-      "risk_forecast.joblib": 2833245,
-      "intervention_policy.joblib": 1255830
+      "risk_forecast.joblib": 2920077,
+      "intervention_policy.joblib": 1067006
     }
   }
 }

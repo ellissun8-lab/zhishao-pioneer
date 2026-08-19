@@ -17,7 +17,10 @@ from sklearn.metrics import accuracy_score, confusion_matrix, f1_score, mean_abs
 
 from training_utils import DEFAULT_DATA_DIR, DEFAULT_MODEL_DIR, STRATEGY_ORDER, feature_matrix, load_split
 
+from backend.app.ml.features import FEATURE_SCHEMA
+
 RISK_HORIZONS = (5, 10, 30)
+FEATURE_SCHEMA_VERSION = "v1"
 TIME_FACTOR = {5: 0.6, 10: 1.0, 30: 1.4}
 HEURISTIC_DOC = "risk>=60 或 (risk_object 且 risk>=40) -> intervene；crowd 且 risk>=25 -> guide_leave；risk>=15 -> warn；否则 none"
 
@@ -110,6 +113,12 @@ def main() -> None:
     metrics = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "synthetic_training": True,
+        "training_run": f"synthetic_ep{int(generation_stats.get('episodes', 0))}_seed{int(generation_stats.get('seed', 42))}",
+        "dataset_seed": int(generation_stats.get("seed", 42)),
+        "dataset_episodes": int(generation_stats.get("episodes", 0)),
+        "feature_schema_version": FEATURE_SCHEMA_VERSION,
+        "risk_model_version": risk_artifact["model_version"],
+        "policy_model_version": policy_artifact["model_version"],
         "dataset": {
             "episodes": int(generation_stats.get("episodes", 0)),
             "seed": int(generation_stats.get("seed", 42)),

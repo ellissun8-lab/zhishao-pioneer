@@ -56,3 +56,47 @@ npm run build
 - `POST /api/chat`：基于工具结果的风险解释与预测问答
 
 架构、规则、来源、演示方式分别见 [本体](docs/ontology.md)、[行为模型](docs/behavior-model.md)、[数据来源](docs/data-sources.md)、[演示脚本](docs/demo-script.md)。
+
+## Synthetic ML Pipeline
+
+在规则 World Behavior Model 之外，用同一套仿真引擎生成 120,000 条 Synthetic Episodes，训练 Risk Forecast 与 Intervention Policy 两个 ML 模型，作为 Agent Tools 接入（模型缺失时透明回退规则模型，规则模型保留不删除）。Dashboard 同时展示两条独立预测路径：**规则世界模型预测**（PredictionPanel）与 **ML 风险预测**（训练模型面板的「ML预测未来10分钟」按钮，`POST /api/ml/predict-risk`）。
+
+**一键复现（fresh clone）：**
+
+```powershell
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r backend/requirements.txt
+
+# 1. 生成 120,000 Synthetic Episodes（seed=42，确定性可复现）
+python scripts/generate_training_data.py --episodes 120000 --seed 42
+
+# 2. 训练（只在 84,000 train 上训练）
+python scripts/train_risk_model.py
+python scripts/train_policy_model.py
+
+# 3. 评估（指标只在 18,000 test 上计算，写入 models/metrics.json）
+python scripts/evaluate_models.py
+```
+
+数据写入 `data/synthetic/*.parquet`（按 episode_id 切分 84,000/18,000/18,000）；模型产物为 `models/risk_forecast.joblib` 与 `models/intervention_policy.joblib`（随仓库提交，可直接运行无需重训）。
+
+启动服务：
+
+```powershell
+python -m uvicorn backend.app.main:app --reload --port 8000
+# 另开终端
+Set-Location frontend
+npm install
+npm run dev
+```
+
+ML 相关 API：
+
+- `GET /api/ml/status`：模型状态与 test 指标（读取 `models/metrics.json`）
+- `POST /api/ml/predict-risk`：运行态 ML 风险预测（World State -> features -> joblib 模型；模型缺失时 `fallback=true, fallback_source=rule_world_behavior_model`）
+- `GET /api/ml/recommend`：模型推荐 + What-if 仿真独立验证
+
+Agent Tools：`ml_predict_risk` / `ml_recommend_strategy`（World State -> 特征提取 -> 训练模型 -> 带 `model_version` 与 `synthetic_training: true` 的 Tool Response；推荐结果必须再经 What-if 仿真验证后解释）。
+
+> 声明：Risk 标签由透明规则 World Behavior Model 生成，ML 风险模型是该规则的 surrogate/distilled 逼近，**不代表真实城市预测精度**；Policy 标签来自 What-if 仿真 utility。全部训练数据 100% Synthetic（详见 `data/synthetic/dataset_card.md` 与 `docs/model-evaluation.md`）。
