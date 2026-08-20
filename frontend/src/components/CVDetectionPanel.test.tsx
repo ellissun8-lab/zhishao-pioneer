@@ -37,7 +37,7 @@ const sceneResult: CVSceneResult = {
   ],
 }
 
-const onComplete = vi.fn<(result: CVSceneResult) => void>()
+const onComplete = vi.fn<(result: CVSceneResult | CVTrainedResult) => void>()
 
 const cvStatus: CVStatus = {
   provider_preference: 'mock',
@@ -275,6 +275,8 @@ describe('CVDetectionPanel · Trained CV mode', () => {
 
     expect(api.cvDetectTrained).toHaveBeenCalledTimes(1)
     expect(api.cvDetectTrained).toHaveBeenCalledWith('demo_high_risk', ['agent_A', 'agent_B', 'agent_C'], expect.any(AbortSignal))
+    expect(onComplete).toHaveBeenCalledTimes(1)
+    expect(onComplete).toHaveBeenCalledWith(trainedResult)
     // real 模式绝不调用 mock 端点
     expect(api.cvDetect).not.toHaveBeenCalled()
 
@@ -363,5 +365,6 @@ describe('CVDetectionPanel · Trained CV mode', () => {
     expect(screen.getByText('API 503')).toBeTruthy()
     expect(screen.getByTestId('cv-run-trained')).toBeTruthy()
     expect(screen.queryByTestId('cv-provider-badge')).toBeNull()
+    expect(onComplete).not.toHaveBeenCalled()
   })
 })

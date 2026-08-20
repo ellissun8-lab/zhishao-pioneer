@@ -79,7 +79,11 @@ function boxTitle(detection: PreviewDetection | CVDetection, personIndex: number
   return '车辆'
 }
 
-type Props = { agents: Agent[]; resetVersion: number; onComplete: (result: CVSceneResult) => void }
+type Props = {
+  agents: Agent[]
+  resetVersion: number
+  onComplete: (result: CVSceneResult | CVTrainedResult) => void
+}
 
 export function CVDetectionPanel({ agents, resetVersion, onComplete }: Props) {
   const [mode, setMode] = useState<CVMode>('mock')
@@ -243,6 +247,7 @@ export function CVDetectionPanel({ agents, resetVersion, onComplete }: Props) {
         const response = await api.cvDetectTrained(demoSceneId, subjects.map((agent) => agent.id), controller.signal)
         setTrainedResult(response)
         setTrainedPhase('done')
+        onComplete(response)
       } catch (caught) {
         setTrainedError(caught instanceof Error ? caught.message : '训练模型推理请求失败')
         setTrainedPhase('idle')

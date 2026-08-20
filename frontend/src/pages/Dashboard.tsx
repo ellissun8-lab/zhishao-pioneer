@@ -11,7 +11,7 @@ import { SimulationPanel } from '../components/SimulationPanel'
 import { TrainedModelsPanel } from '../components/TrainedModelsPanel'
 import { WorldStatePanel } from '../components/WorldStatePanel'
 import { useWorld } from '../stores/useWorld'
-import type { Agent, ChatMessage, CVSceneResult, SimulationResult, Strategy, Zone } from '../types'
+import type { Agent, ChatMessage, CVSceneResult, CVTrainedResult, SimulationResult, Strategy, Zone } from '../types'
 
 const AUTO_TICK_INTERVAL_MS = 1500
 
@@ -101,7 +101,7 @@ export default function Dashboard() {
     })
   }
 
-  function handleCVDetection(result: CVSceneResult) {
+  function handleCVDetection(result: CVSceneResult | CVTrainedResult) {
     void (async () => {
       await refresh()
       setNotice(`CV 识别完成：${result.events.length} 个感知事件已进入 Event Bus`)

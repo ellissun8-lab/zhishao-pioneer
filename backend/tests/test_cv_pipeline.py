@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -34,7 +35,9 @@ from backend.app.service import world_service
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 FULL_STATS = PROJECT_ROOT / "data" / "cv_synthetic" / "stats.json"
+FULL_CARD = PROJECT_ROOT / "data" / "cv_synthetic" / "dataset_card.md"
 DEMO_LABELS = PROJECT_ROOT / "data" / "cv_demo" / "demo_labels.json"
+EXPECTED_DATASET_HASH = "e780807538d213731313ed672769cdd909599c3ad6e03ea3ffcd5bd219c1b1d4"
 
 client = TestClient(app)
 
@@ -117,10 +120,59 @@ def set_fake_results(model: FakeYOLO, boxes_spec, orig_shape=(480, 640)):
 # ---------- 数据集生成 ----------
 
 
-def _generate(tmp_path: Path, images: int = 24, seed: int = 42):
+def _generate(tmp_path: Path, images: int = 48, seed: int = 42):
     out_dir = tmp_path / f"cv_{seed}"
     stats = cvgen.generate_dataset(out_dir, images=images, seed=seed)
     return out_dir, stats
+
+
+def _recompute_dataset_hash(out_dir: Path, stats: dict[str, object]) -> str:
+    """从实际图片与标签重建 generator manifest hash，不信任 stats 中的现成值。"""
+    manifest: list[dict[str, object]] = []
+    for split in cvgen.SPLITS:
+        for image_path in sorted((out_dir / "images" / split).glob("*.jpg")):
+            label_path = out_dir / "labels" / split / f"{image_path.stem}.txt"
+            manifest.append(
+                {
+                    "name": f"{split}/{image_path.name}",
+                    "sha256": hashlib.sha256(image_path.read_bytes()).hexdigest(),
+                    "labels": label_path.read_text(encoding="utf-8").splitlines(),
+                }
+            )
+    payload = json.dumps(
+        {
+            "seed": stats["seed"],
+            "images": stats["image_count"],
+            "ood": stats["ood"],
+            "files": sorted(manifest, key=lambda item: item["name"]),
+        },
+        sort_keys=True,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def test_cv_committed_dataset_metadata():
+    """发布仓库只提交可重建 metadata；普通 pytest 不要求 gitignored 的 50k 图片存在。"""
+    assert FULL_STATS.is_file()
+    assert FULL_CARD.is_file()
+    full = json.loads(FULL_STATS.read_text(encoding="utf-8"))
+    assert full["image_count"] == 50000
+    assert full["instance_count"] == 149751
+    assert full["seed"] == 42
+    assert full["dataset_hash"] == EXPECTED_DATASET_HASH
+    assert {split: full["split_distribution"][split]["images"] for split in cvgen.SPLITS} == {
+        "train": 35000,
+        "val": 7500,
+        "test": 7500,
+    }
+    assert cvgen.SPLITS == ("train", "val", "test")
+    assert cvgen.JPEG_QUALITY == 92
+
+    card = FULL_CARD.read_text(encoding="utf-8")
+    for expected in ("图片数：50000", "实例数：149751", "seed：42", EXPECTED_DATASET_HASH):
+        assert expected in card
 
 
 def test_cv_dataset_generation_deterministic(tmp_path):
@@ -134,11 +186,13 @@ def test_cv_dataset_generation_deterministic(tmp_path):
         names_a = sorted(p.name for p in (out_a / "images" / split).glob("*.jpg"))
         names_b = sorted(p.name for p in (out_b / "images" / split).glob("*.jpg"))
         assert names_a == names_b
-        for name in names_a[:5]:
+        for name in names_a:
             assert (out_a / "images" / split / name).read_bytes() == (out_b / "images" / split / name).read_bytes()
             label_a = out_a / "labels" / split / (name.replace(".jpg", ".txt"))
             label_b = out_b / "labels" / split / (name.replace(".jpg", ".txt"))
             assert label_a.read_text() == label_b.read_text()
+    assert _recompute_dataset_hash(out_a, stats_a) == stats_a["dataset_hash"]
+    assert _recompute_dataset_hash(out_b, stats_b) == stats_b["dataset_hash"]
 
 
 def test_cv_dataset_bbox_valid(tmp_path):
@@ -160,7 +214,7 @@ def test_cv_dataset_bbox_valid(tmp_path):
 
 
 def test_cv_dataset_instance_count(tmp_path):
-    """实例数 = 标注行数；负样本存在；全量数据集满足 >=40000 图 / >=100000 实例。"""
+    """小规模生成集的实例数 = 实际标注行数，并包含负样本。"""
     out_dir, stats = _generate(tmp_path)
     total_lines = sum(
         len(p.read_text().splitlines()) for p in (out_dir / "labels").rglob("*.txt")
@@ -169,14 +223,8 @@ def test_cv_dataset_instance_count(tmp_path):
     assert stats["instance_count"] >= stats["image_count"]
     assert stats["empty_images"] > 0, "必须有负样本（空标注）"
 
-    if not FULL_STATS.exists():
-        pytest.skip("full dataset stats missing; run scripts/generate_cv_dataset.py first")
-    full = json.loads(FULL_STATS.read_text(encoding="utf-8"))
-    assert full["image_count"] >= 40000
-    assert full["instance_count"] >= 100000
-    assert set(full["per_class_instances"]) == {"person", "risk_object", "vehicle"}
-    # 无严重类别不平衡：最大类占比 < 70%
-    counts = full["per_class_instances"]
+    assert set(stats["per_class_instances"]) == {"person", "risk_object", "vehicle"}
+    counts = stats["per_class_instances"]
     assert max(counts.values()) / sum(counts.values()) < 0.70
 
 
@@ -204,30 +252,24 @@ def test_cv_no_real_person_data():
 
 
 def test_cv_split_isolation(tmp_path):
-    """train/val/test 文件互不重叠；全量数据集切分数量与 stats 一致。"""
+    """tmp_path 小规模数据的 split 互斥，且图片/标签/统计三者一致。"""
     out_dir, stats = _generate(tmp_path)
     splits: dict[str, set[str]] = {}
     for split in ("train", "val", "test"):
         splits[split] = {p.stem for p in (out_dir / "images" / split).glob("*.jpg")}
+        labels = {p.stem for p in (out_dir / "labels" / split).glob("*.txt")}
         assert splits[split]
+        assert labels == splits[split]
+        assert len(splits[split]) == stats["split_distribution"][split]["images"]
+        actual_instances = sum(
+            len(path.read_text(encoding="utf-8").splitlines())
+            for path in (out_dir / "labels" / split).glob("*.txt")
+        )
+        assert actual_instances == stats["split_distribution"][split]["instances"]
     assert not splits["train"] & splits["val"]
     assert not splits["train"] & splits["test"]
     assert not splits["val"] & splits["test"]
     assert len(splits["train"] | splits["val"] | splits["test"]) == stats["image_count"]
-
-    if not FULL_STATS.exists():
-        pytest.skip("full dataset stats missing; run scripts/generate_cv_dataset.py first")
-    full = json.loads(FULL_STATS.read_text(encoding="utf-8"))
-    full_dir = FULL_STATS.parent
-    full_splits: dict[str, set[str]] = {}
-    for split in ("train", "val", "test"):
-        full_splits[split] = {p.stem for p in (full_dir / "images" / split).glob("*.jpg")}
-    assert not full_splits["train"] & full_splits["val"]
-    assert not full_splits["train"] & full_splits["test"]
-    assert not full_splits["val"] & full_splits["test"]
-    for split in ("train", "val", "test"):
-        assert len(full_splits[split]) == full["split_distribution"][split]["images"]
-    assert sum(len(s) for s in full_splits.values()) == full["image_count"]
 
 
 # ---------- RealCVProvider：真实推理与防伪造 ----------
@@ -491,4 +533,73 @@ def test_agent_cv_detection_summary_grounding():
     assert answer["tools_used"] == ["get_cv_detection_summary"]
     assert "Trained CV" in answer["answer"]
     assert "YOLO.predict" in answer["answer"]
+    assert "provider=real" in answer["answer"]
+    assert "model_invoked=true" in answer["answer"]
     assert "person 83%" in answer["answer"] and "risk_object 61%" in answer["answer"]
+
+
+def _record_real_cv_summary() -> None:
+    real_cv.record_last_detection_summary(
+        {
+            "provider": "real",
+            "model_invoked": True,
+            "model_version": "cv_yolo_8.4.123",
+            "scene_id": "demo_high_risk",
+            "detection_count": 3,
+            "labels": ["person", "risk_object", "vehicle"],
+            "confidences": [0.91, 0.82, 0.73],
+            "crowd": {"person_count": 3, "max_pair_distance": 0.161},
+            "latency_ms": 42.0,
+        }
+    )
+
+
+def _record_fallback_cv_summary() -> None:
+    real_cv.record_last_detection_summary(
+        {
+            "provider": "mock_fallback",
+            "model_invoked": False,
+            "model_version": None,
+            "scene_id": "demo_high_risk",
+            "detection_count": 1,
+            "labels": ["person"],
+            "confidences": [0.96],
+            "crowd": None,
+            "latency_ms": None,
+            "fallback_reason": "model file missing",
+        }
+    )
+
+
+def test_agent_cv_summary_contains_provider():
+    _record_real_cv_summary()
+    answer = explain_question("视觉模型检测到了什么？", world_service.state)
+    assert answer["tools_used"] == ["get_cv_detection_summary"]
+    assert "provider=real" in answer["answer"]
+
+
+def test_agent_cv_summary_contains_model_invoked():
+    _record_real_cv_summary()
+    answer = explain_question("视觉模型检测到了什么？", world_service.state)
+    assert "model_invoked=true" in answer["answer"]
+
+
+def test_agent_cv_real_summary_reports_real():
+    _record_real_cv_summary()
+    answer = explain_question("视觉模型检测到了什么？", world_service.state)
+    assert "Model Version: cv_yolo_8.4.123" in answer["answer"]
+    assert "person 91%" in answer["answer"]
+    assert "risk_object 82%" in answer["answer"]
+    assert "vehicle 73%" in answer["answer"]
+    assert "CrowdDetected：来自 cv_aggregation" in answer["answer"]
+
+
+def test_agent_cv_fallback_not_reported_as_real():
+    _record_fallback_cv_summary()
+    answer = explain_question("视觉模型检测到了什么？", world_service.state)
+    assert "provider=mock_fallback" in answer["answer"]
+    assert "model_invoked=false" in answer["answer"]
+    assert "当前没有使用 trained model inference" in answer["answer"]
+    assert "provider=real" not in answer["answer"]
+    assert "model_invoked=true" not in answer["answer"]
+    assert "YOLO.predict" not in answer["answer"]

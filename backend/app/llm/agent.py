@@ -124,21 +124,26 @@ def _cv_detection_answer(tools: AgentTools) -> dict[str, object]:
     ) or "无任何 Detection"
     if summary.get("provider") == "real" and summary.get("model_invoked"):
         provider_line = (
+            "CV Provider: provider=real。Model Invoked: model_invoked=true。"
+            f"Model Version: {summary.get('model_version') or 'real model'}。"
             f"Trained CV（{summary.get('model_version') or 'real model'}）在最近一次真实推理"
             f"（YOLO.predict，场景 {summary.get('scene_id')}，耗时 {summary.get('latency_ms')}ms）中检测到 "
             f"{summary.get('detection_count', 0)} 个目标：{detail_line}。"
         )
     else:
         provider_line = (
-            f"最近一次 CV 结果来自 Mock Fallback（模型未真实调用，model_invoked=false，"
+            f"CV Provider: provider={summary.get('provider') or 'mock_fallback'}。"
+            "Model Invoked: model_invoked=false。Model Version: unavailable。"
+            f"最近一次 CV 结果来自 Mock Fallback（当前没有使用 trained model inference，"
             f"原因：{summary.get('fallback_reason') or '模型不可用'}），并非 Trained CV 输出；"
             f"该次共 {summary.get('detection_count', 0)} 个 Detection：{detail_line}。"
         )
     crowd = summary.get("crowd")
     crowd_line = (
-        f"感知层聚合出多人聚集（{crowd.get('person_count')} 人，成对中心距 {crowd.get('max_pair_distance')}）。"
+        f"CrowdDetected：来自 cv_aggregation，感知层聚合出多人聚集"
+        f"（{crowd.get('person_count')} 人，成对中心距 {crowd.get('max_pair_distance')}）。"
         if crowd
-        else "未触发感知层聚集聚合。"
+        else "CrowdDetected：未触发 cv_aggregation 感知层聚集聚合。"
     )
     answer = (
         f"{provider_line}{crowd_line}"
