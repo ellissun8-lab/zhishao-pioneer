@@ -16,3 +16,6 @@ joblib==1.5.3
 ultralytics==8.4.123
 opencv-python-headless>=4.10
 Pillow>=10.4
+
+# Qwen3.8-Max Agent（Alibaba Cloud Model Studio OpenAI-compatible API，Chat/Function Calling/Vision）
+openai>=1.60,<3

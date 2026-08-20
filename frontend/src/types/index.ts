@@ -86,7 +86,58 @@ export type SimulationResult = {
   synthetic: true
 }
 
-export type ChatMessage = { role: 'user' | 'assistant'; content: string }
+export type ChatMessage = { role: 'user' | 'assistant'; content: string; trace?: ChatTrace }
+
+export type ChatTrace = {
+  provider: string
+  model: string | null
+  tools_used: string[]
+  tool_rounds: number
+  request_id: string | null
+  latency_ms: number | null
+  fallback: boolean
+  fallback_reason?: string | null
+}
+
+export type LLMStatus = {
+  provider: string
+  model: string
+  configured: boolean
+  connected: boolean
+  function_calling: boolean
+  multimodal: boolean
+  fallback: boolean
+  fallback_reason: string | null
+  components: {
+    cv_detector: { name: string; status: string; model_version: string | null; model_path: string; available: boolean }
+    risk_forecast: { name: string; status: string; model_version: string | null }
+    policy_model: { name: string; status: string; model_version: string | null }
+  }
+}
+
+export type VisionStructured = {
+  estimated_people: number
+  vehicle_visible: boolean
+  possible_risk_object: boolean
+  crowd_semantics: string
+  summary: string
+  synthetic_visual_data: boolean
+}
+
+export type VisionAnalyzeResult = {
+  fallback: boolean
+  provider: string
+  model: string
+  source?: string
+  scene_id?: string
+  structured: VisionStructured | null
+  raw_content?: string | null
+  parse_error?: boolean
+  request_id?: string | null
+  latency_ms?: number
+  note?: string
+  error?: string
+}
 
 export type CVLabel = 'person' | 'crowd' | 'risk_object' | 'vehicle'
 

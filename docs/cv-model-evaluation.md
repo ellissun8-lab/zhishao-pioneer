@@ -19,7 +19,7 @@
 | 类别 | 仅 3 类：`person / risk_object / vehicle`（`crowd` 是感知层聚合结果，不是训练类别） |
 | 推理延迟 | **7.57 ms/张**（GPU cuda:0，100 张 test 图实测，含 warmup） |
 
-## Test split 指标（7,500 张 / 22,386 实例，独立于训练与调参）
+## Test split 指标（7,500 张 / 22,552 实例，独立于训练与调参）
 
 | mAP50-95 | mAP50 | mAP75 | Precision | Recall |
 | --- | --- | --- | --- | --- |

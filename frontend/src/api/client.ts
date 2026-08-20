@@ -1,4 +1,4 @@
-import type { CVSceneResult, CVStatus, CVTrainedResult, MLRecommend, MLRiskPrediction, MLStatus, Prediction, SimulationResult, Strategy, WorldState } from '../types'
+import type { ChatTrace, CVSceneResult, CVStatus, CVTrainedResult, LLMStatus, MLRecommend, MLRiskPrediction, MLStatus, Prediction, SimulationResult, Strategy, VisionAnalyzeResult, WorldState } from '../types'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
@@ -54,7 +54,17 @@ export const api = {
   cvDemoImageUrl: (demoSceneId: string) =>
     `${API_BASE}/api/perception/cv/demo-image/${demoSceneId}`,
   chat: (message: string) =>
-    request<{ answer: string }>('/api/chat', { method: 'POST', body: JSON.stringify({ message }) }),
+    request<{ answer: string; tools_used?: string[] } & Partial<ChatTrace>>('/api/chat', {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    }),
+  getLLMStatus: () => request<LLMStatus>('/api/llm/status'),
+  // Qwen3.8-Max Vision：语义理解（非 YOLO 检测）
+  visionAnalyze: (demoSceneId: string) =>
+    request<VisionAnalyzeResult>('/api/llm/vision/analyze', {
+      method: 'POST',
+      body: JSON.stringify({ demo_scene_id: demoSceneId }),
+    }),
   getMLStatus: () => request<MLStatus>('/api/ml/status'),
   getMLRecommend: () => request<MLRecommend>('/api/ml/recommend'),
   predictMLRisk: (horizonMinutes: number) =>

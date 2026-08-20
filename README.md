@@ -54,7 +54,9 @@ npm run build
 - `POST /api/simulation/run`、`GET /api/simulation/compare`：What-if（在 World State 深拷贝上运行，不影响实时状态）
 - `POST /api/perception/mock`：Mock CV 感知（person / vehicle / crowd / risk_object；crowd 产出感知层 CrowdDetected）
 - `POST /api/perception/cv/detect-image`：Trained CV 真实 YOLO 推理（见下文 Synthetic CV Training Pipeline）
-- `POST /api/chat`：基于工具结果的风险解释与预测问答
+- `POST /api/chat`：Agent 问答（Qwen3.8-Max Function Calling 优先，Key 缺失/超时/限流时确定性回退，见下文 Qwen3.8-Max Agent）
+- `GET /api/llm/status`：LLM 状态（provider / model / connected / fallback 与 CV·风险·策略模型组件状态；不返回 API Key）
+- `POST /api/llm/vision/analyze`：Qwen Vision 语义理解（发送合成 demo 图给 qwen3.8-max，结构化输出；与 YOLO 检测严格分工）
 
 架构、规则、来源、演示方式分别见 [本体](docs/ontology.md)、[行为模型](docs/behavior-model.md)、[数据来源](docs/data-sources.md)、[演示脚本](docs/demo-script.md)。
 
@@ -144,3 +146,31 @@ CV 相关 API：
 Agent Tools：`get_cv_detection_summary`（「视觉模型检测到了什么？」——读取最近一次 CV 推理记录；provider 与 model_invoked 如实标注，绝不把 MockCV 输出说成 Trained CV）。
 
 > **第三方依赖声明**：目标检测使用 [Ultralytics YOLO](https://github.com/ultralytics/ultralytics)（第三方库，**AGPL-3.0 许可证**，版权归 Ultralytics Inc. 所有），本项目仅作为依赖调用、未修改其源码；合成图像渲染使用 Pillow（MIT-CMU License）与 OpenCV（Apache-2.0，`opencv-python-headless`）。内置 `yolo26n.pt` 预训练权重同样来自 Ultralytics 并遵循其许可条款。
+
+## Qwen3.8-Max Agent 集成
+
+聊天问答接入 **Qwen3.8-Max**（阿里云百炼 Model Studio 官方 OpenAI-compatible API，`from openai import OpenAI` + `base_url=https://dashscope.aliyuncs.com/compatible-mode/v1`），模型名固定为 `qwen3.8-max`（禁止以 `qwen3-max` / `qwen-plus` / `qwen3.8-max-preview` 冒充）。
+
+**配置（本地 `.env`，Key 绝不入库/不入 README/不入测试）：**
+
+```dotenv
+DASHSCOPE_API_KEY=sk-****          # 只写本地 .env 或部署 secret
+DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+QWEN_MODEL=qwen3.8-max
+```
+
+**真实 Function Calling Loop**：`POST /api/chat` 将现有 10 个 Agent Tools（`get_world_state` / `get_agent_state` / `get_active_events` / `get_risk_analysis` / `predict_future` / `ml_predict_risk` / `ml_recommend_strategy` / `run_simulation` / `compare_strategies` / `get_cv_detection_summary`）注册为 OpenAI function schema，模型发起 `tool_calls` -> 后端执行**真实业务函数** -> 结果回传 -> 循环（上限 5 轮防死循环）-> 基于工具结果作答。验收问题必须走真实工具：「训练模型认为未来 10 分钟风险多少？」必须调用 `ml_predict_risk(horizon_minutes=10)`，禁止模型自己估算；策略问题走 `ml_recommend_strategy` + `compare_strategies` 并区分「模型概率」与「What-if 仿真」。
+
+**Qwen Vision 语义理解**：`POST /api/llm/vision/analyze` 把合成 demo 图真实发送给 qwen3.8-max，返回结构化结果（`estimated_people` / `vehicle_visible` / `possible_risk_object` / `crowd_semantics` / `summary`）。与 YOLO 严格分工：YOLO 负责 bbox/类别/检测置信度，Qwen Vision 只做语义理解，**不产出检测置信度、不写入事件链**。
+
+**诚实回退**：Key 缺失或超时/429/5xx 时系统不崩溃，聊天退回确定性 grounded 解释（真实执行工具后基于结果生成），但 UI 必须显示 `Qwen3.8-Max Offline / Fallback Explanation`，绝不显示 Connected、绝不伪造 request_id。
+
+**API**：
+
+- `GET /api/llm/status`：`{provider, model, configured, connected, function_calling, multimodal, fallback}` + 组件状态（CV Detector / Risk Forecast / Policy Model），全部来自真实检查；不返回 API Key。
+- `POST /api/chat`：`{answer, provider, model, tools_used[], tool_rounds, request_id, latency_ms, fallback}`；trace 不记录 api_key / authorization / secret。
+- `POST /api/llm/vision/analyze`：`{structured, provider, model, request_id, latency_ms, fallback}`。
+
+**真实 API smoke**：配置合法 Key 后运行 `python scripts/qwen_smoke_test.py`（文本 / Function Calling / 多 Tool / Vision 四项逐项 PASS/FAIL）。
+
+> 测试（`backend/tests/test_qwen_agent.py`）只在网络边界注入 FakeClient：Function Calling 循环、工具适配器、业务函数全部真实执行，不 mock Agent 核心逻辑。

@@ -10,6 +10,7 @@ vi.mock('../api/client', () => ({
     cvDetect: vi.fn(),
     getCVStatus: vi.fn(),
     cvDetectTrained: vi.fn(),
+    visionAnalyze: vi.fn(),
     cvDemoImageUrl: vi.fn((id: string) => `/api/perception/cv/demo-image/${id}`),
   },
 }))
@@ -90,6 +91,7 @@ beforeEach(() => {
   vi.mocked(api.getCVStatus).mockResolvedValue(cvStatus)
   vi.mocked(api.cvDetectTrained).mockReset()
   vi.mocked(api.cvDetectTrained).mockResolvedValue(trainedResult)
+  vi.mocked(api.visionAnalyze).mockReset()
   onComplete.mockClear()
 })
 
@@ -366,5 +368,79 @@ describe('CVDetectionPanel · Trained CV mode', () => {
     expect(screen.getByTestId('cv-run-trained')).toBeTruthy()
     expect(screen.queryByTestId('cv-provider-badge')).toBeNull()
     expect(onComplete).not.toHaveBeenCalled()
+  })
+})
+
+describe('CVDetectionPanel · Qwen Vision（语义理解）', () => {
+  const visionResult = {
+    fallback: false,
+    provider: 'Alibaba Cloud Model Studio',
+    model: 'qwen3.8-max',
+    source: 'Qwen3.8-Max Vision',
+    scene_id: 'demo_high_risk',
+    structured: {
+      estimated_people: 3,
+      vehicle_visible: true,
+      possible_risk_object: true,
+      crowd_semantics: '校门口三人驻留，间距较近',
+      summary: '合成监控画面中三人聚集，画面右侧有一辆车与一件疑似遗留物品。',
+      synthetic_visual_data: true,
+    },
+    raw_content: '{...}',
+    request_id: 'req-vision-1',
+    latency_ms: 1830.2,
+    note: 'Qwen Vision 为语义理解（scene understanding），不是 YOLO 检测；不产出 bbox / 检测类别 / 检测置信度，也不写入事件链。',
+  }
+
+  it('Qwen视觉理解 calls the vision API once and renders semantic result with source label', async () => {
+    vi.mocked(api.visionAnalyze).mockResolvedValue(visionResult)
+    renderPanel()
+    fireEvent.click(screen.getByTestId('cv-mode-trained'))
+
+    fireEvent.click(screen.getByTestId('cv-run-qwen-vision'))
+    await act(async () => {})
+
+    expect(api.visionAnalyze).toHaveBeenCalledTimes(1)
+    expect(api.visionAnalyze).toHaveBeenCalledWith('demo_high_risk')
+    const result = screen.getByTestId('cv-qwen-vision-result')
+    expect(screen.getByTestId('cv-qwen-vision-source').textContent ?? '').toContain('Qwen3.8-Max Vision · 语义理解')
+    expect(result.textContent ?? '').toContain('估计人数')
+    expect(result.textContent ?? '').toContain('3 人')
+    expect(result.textContent ?? '').toContain('疑似风险物品')
+    expect(result.textContent ?? '').toContain('校门口三人驻留，间距较近')
+    // 与 YOLO 严格分工：语义理解结果绝不冒充检测，也不触发事件链
+    expect(result.textContent ?? '').toContain('非 YOLO 检测')
+    expect(screen.queryByTestId('cv-qwen-vision-offline')).toBeNull()
+  })
+
+  it('Qwen offline fallback renders Qwen3.8-Max Offline badge without structured result', async () => {
+    vi.mocked(api.visionAnalyze).mockResolvedValue({
+      fallback: true,
+      provider: 'Alibaba Cloud Model Studio',
+      model: 'qwen3.8-max',
+      structured: null,
+      note: 'Qwen3.8-Max Offline：DASHSCOPE_API_KEY 未配置；无法执行视觉语义理解。',
+    })
+    renderPanel()
+    fireEvent.click(screen.getByTestId('cv-mode-trained'))
+
+    fireEvent.click(screen.getByTestId('cv-run-qwen-vision'))
+    await act(async () => {})
+
+    expect(screen.getByTestId('cv-qwen-vision-offline').textContent ?? '').toContain('Qwen3.8-Max Offline')
+    expect(screen.getByText(/DASHSCOPE_API_KEY 未配置/)).toBeTruthy()
+    expect(screen.queryByText('估计人数')).toBeNull()
+  })
+
+  it('switching demo scene clears the previous vision result', async () => {
+    vi.mocked(api.visionAnalyze).mockResolvedValue(visionResult)
+    renderPanel()
+    fireEvent.click(screen.getByTestId('cv-mode-trained'))
+    fireEvent.click(screen.getByTestId('cv-run-qwen-vision'))
+    await act(async () => {})
+    expect(screen.getByTestId('cv-qwen-vision-result')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: '人员聚集' }))
+    expect(screen.queryByTestId('cv-qwen-vision-result')).toBeNull()
   })
 })

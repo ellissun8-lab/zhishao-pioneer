@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api/client'
 import { agentDisplayName } from '../labels'
-import type { Agent, CVBBox, CVDetection, CVLabel, CVSceneResult, CVStatus, CVTrainedResult } from '../types'
+import type { Agent, CVBBox, CVDetection, CVLabel, CVSceneResult, CVStatus, CVTrainedResult, VisionAnalyzeResult } from '../types'
 
 type Phase = 'idle' | 'analyzing' | 'scanning' | 'detecting' | 'confidence' | 'submitting' | 'done'
 type CVMode = 'mock' | 'trained'
 type TrainedPhase = 'idle' | 'running' | 'done'
+type VisionPhase = 'idle' | 'running'
 
 type SceneConfig = { id: string; name: string; hint: string }
 
@@ -97,6 +98,9 @@ export function CVDetectionPanel({ agents, resetVersion, onComplete }: Props) {
   const [trainedPhase, setTrainedPhase] = useState<TrainedPhase>('idle')
   const [trainedResult, setTrainedResult] = useState<CVTrainedResult | null>(null)
   const [trainedError, setTrainedError] = useState('')
+  const [visionPhase, setVisionPhase] = useState<VisionPhase>('idle')
+  const [visionResult, setVisionResult] = useState<VisionAnalyzeResult | null>(null)
+  const [visionError, setVisionError] = useState('')
   const runningRef = useRef(false)
   const timersRef = useRef<number[]>([])
   const generationRef = useRef(0)
@@ -131,6 +135,9 @@ export function CVDetectionPanel({ agents, resetVersion, onComplete }: Props) {
     setTrainedPhase('idle')
     setTrainedResult(null)
     setTrainedError('')
+    setVisionPhase('idle')
+    setVisionResult(null)
+    setVisionError('')
   }, [resetVersion])
 
   useEffect(() => () => {
@@ -162,6 +169,9 @@ export function CVDetectionPanel({ agents, resetVersion, onComplete }: Props) {
     setTrainedPhase('idle')
     setTrainedResult(null)
     setTrainedError('')
+    setVisionPhase('idle')
+    setVisionResult(null)
+    setVisionError('')
   }
 
   function switchScene(nextId: string) {
@@ -186,6 +196,9 @@ export function CVDetectionPanel({ agents, resetVersion, onComplete }: Props) {
     setTrainedPhase('idle')
     setTrainedResult(null)
     setTrainedError('')
+    setVisionPhase('idle')
+    setVisionResult(null)
+    setVisionError('')
   }
 
   function startDetection() {
@@ -253,6 +266,24 @@ export function CVDetectionPanel({ agents, resetVersion, onComplete }: Props) {
         setTrainedPhase('idle')
       } finally {
         trainedAbortRef.current = null
+      }
+    })()
+  }
+
+  // Qwen3.8-Max Vision：语义理解（与 YOLO 检测严格分工，不产出 bbox/检测置信度）
+  function runQwenVision() {
+    if (visionPhase === 'running') return
+    setVisionPhase('running')
+    setVisionResult(null)
+    setVisionError('')
+    void (async () => {
+      try {
+        const response = await api.visionAnalyze(demoSceneId)
+        setVisionResult(response)
+        setVisionPhase('idle')
+      } catch (caught) {
+        setVisionError(caught instanceof Error ? caught.message : 'Qwen 视觉理解请求失败')
+        setVisionPhase('idle')
       }
     })()
   }
@@ -432,6 +463,40 @@ export function CVDetectionPanel({ agents, resetVersion, onComplete }: Props) {
             >
               {busy ? '模型推理中…' : '运行训练模型'}
             </button>
+            <button
+              type="button"
+              className="cv-run cv-run-qwen"
+              onClick={runQwenVision}
+              disabled={visionPhase === 'running'}
+              data-testid="cv-run-qwen-vision"
+            >
+              {visionPhase === 'running' ? 'Qwen 理解中…' : 'Qwen视觉理解'}
+            </button>
+            {visionResult ? (
+              <div className="cv-qwen-vision" data-testid="cv-qwen-vision-result">
+                <div className="cv-qwen-vision-head">
+                  <span className="cv-qwen-vision-source" data-testid="cv-qwen-vision-source">Qwen3.8-Max Vision · 语义理解</span>
+                  {visionResult.fallback ? (
+                    <span className="cv-badge fallback" data-testid="cv-qwen-vision-offline">Qwen3.8-Max Offline</span>
+                  ) : null}
+                </div>
+                {visionResult.fallback || !visionResult.structured ? (
+                  <p className="cv-qwen-vision-note">{visionResult.note ?? visionResult.error ?? 'Qwen 视觉理解不可用'}</p>
+                ) : (
+                  <div className="cv-qwen-vision-body">
+                    <p><b>估计人数</b> {visionResult.structured.estimated_people} 人 <b>车辆可见</b> {visionResult.structured.vehicle_visible ? '是' : '否'} <b>疑似风险物品</b> {visionResult.structured.possible_risk_object ? '是' : '否'}</p>
+                    {visionResult.structured.crowd_semantics ? <p><b>人群语义</b> {visionResult.structured.crowd_semantics}</p> : null}
+                    {visionResult.structured.summary ? <p><b>场景总结</b> {visionResult.structured.summary}</p> : null}
+                    <p className="cv-qwen-vision-meta">
+                      Synthetic Visual Data · {visionResult.latency_ms != null ? `${Math.round(visionResult.latency_ms)}ms` : '-'}
+                      {visionResult.request_id ? ` · request ${visionResult.request_id.slice(0, 12)}…` : ''}
+                      （语义理解结果，非 YOLO 检测，不产出 bbox/置信度，不写入事件链）
+                    </p>
+                  </div>
+                )}
+              </div>
+            ) : null}
+            {visionError ? <p className="cv-error">{visionError}</p> : null}
             {modelBadge ? <div className={modelBadge.className} data-testid="cv-provider-badge">{modelBadge.text}</div> : null}
             {trainedResult ? (
               <div className="cv-result">

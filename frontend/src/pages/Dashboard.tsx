@@ -131,7 +131,23 @@ export default function Dashboard() {
     setMessages((current) => [...current, { role: 'user', content: message }])
     void execute(async () => {
       const response = await api.chat(message)
-      setMessages((current) => [...current, { role: 'assistant', content: response.answer }])
+      setMessages((current) => [
+        ...current,
+        {
+          role: 'assistant',
+          content: response.answer,
+          trace: {
+            provider: response.provider ?? 'deterministic_fallback',
+            model: response.model ?? null,
+            tools_used: response.tools_used ?? [],
+            tool_rounds: response.tool_rounds ?? 0,
+            request_id: response.request_id ?? null,
+            latency_ms: response.latency_ms ?? null,
+            fallback: response.fallback ?? false,
+            fallback_reason: response.fallback_reason ?? null,
+          },
+        },
+      ])
     })
   }
 
