@@ -109,6 +109,57 @@ export type CVSceneResult = {
   risk_state?: RiskState
 }
 
+export type CVCrowdSummary = {
+  person_count: number
+  max_pair_distance: number
+  confidence: number
+  bbox: CVBBox
+  centroid: number[]
+  detection_ids: string[]
+}
+
+// /api/perception/cv/detect-image 的真实推理响应（Trained CV 模式）
+export type CVTrainedResult = {
+  provider: 'real' | 'mock_fallback'
+  model_invoked: boolean
+  model_path?: string | null
+  model_version?: string | null
+  synthetic_visual_data: boolean
+  scene_id: string
+  conf_threshold?: number
+  latency_ms?: number
+  fallback_reason?: string
+  detections: CVDetection[]
+  events: WorldEvent[]
+  crowd: CVCrowdSummary | null
+  risk_state?: RiskState
+  note?: string
+}
+
+export type CVStatus = {
+  provider_preference: 'mock' | 'real'
+  model_available: boolean
+  model_loaded: boolean
+  model_path: string
+  model_version: string | null
+  class_names: string[]
+  conf_threshold: number
+  unavailable_reason: string | null
+  last_inference: {
+    provider: 'real' | 'mock_fallback'
+    model_invoked: boolean
+    model_version: string | null
+    scene_id: string | null
+    detection_count: number
+    labels: string[]
+    confidences: number[]
+    crowd: CVCrowdSummary | null
+    latency_ms: number | null
+    fallback_reason?: string
+    timestamp: string
+  } | null
+}
+
 export type MLStatus = {
   risk_available: boolean
   policy_available: boolean

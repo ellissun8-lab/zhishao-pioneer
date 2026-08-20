@@ -10,3 +10,7 @@ scikit-learn==1.9.0
 pyarrow==24.0.0
 joblib==1.5.3
 
+# Synthetic CV Pipeline 依赖（YOLO 检测训练/推理；Ultralytics 为 AGPL-3.0 第三方库，见 README）
+ultralytics==8.4.123
+opencv-python-headless>=4.10
+Pillow>=10.4

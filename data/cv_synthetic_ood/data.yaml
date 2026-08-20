@@ -1,0 +1,9 @@
+# Ultralytics YOLO detection format (OOD evaluation-only)
+path: D:/工作/黑客松/data/cv_synthetic_ood
+train: images/val
+val: images/val
+test: images/val
+names:
+  0: person
+  1: risk_object
+  2: vehicle

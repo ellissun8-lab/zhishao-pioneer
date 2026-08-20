@@ -1,0 +1,71 @@
+{
+  "per_class_instances": {
+    "person": 11488,
+    "risk_object": 3902,
+    "vehicle": 4010
+  },
+  "objects_per_image_hist": {
+    "0": 483,
+    "1": 302,
+    "2": 539,
+    "3": 771,
+    "4": 896,
+    "5": 789,
+    "6": 608,
+    "7": 407,
+    "8": 205
+  },
+  "empty_images": 483,
+  "occlusion_distribution": {
+    "none": 11673,
+    "partial": 1942,
+    "heavy": 5785
+  },
+  "size_distribution": {
+    "small": 4619,
+    "medium": 9358,
+    "large": 5423
+  },
+  "lighting_distribution": {
+    "bright": 340,
+    "normal": 2172,
+    "dim": 2488
+  },
+  "weather_distribution": {
+    "clear": 1606,
+    "fog": 2111,
+    "rain": 1283
+  },
+  "scene_distribution": {
+    "urban_gate": 815,
+    "school_entrance": 833,
+    "street": 790,
+    "parking": 858,
+    "plaza": 842,
+    "station_entrance": 862
+  },
+  "time_of_day_distribution": {
+    "day": 1014,
+    "dusk": 1498,
+    "night": 2488
+  },
+  "split_distribution": {
+    "val": {
+      "images": 5000,
+      "instances": 19400
+    }
+  },
+  "image_count": 5000,
+  "instance_count": 19400,
+  "empty_image_ratio": 0.0966,
+  "objects_per_image": 3.88,
+  "generation_seconds": 171.9,
+  "seed": 2026,
+  "ood": true,
+  "image_size": [
+    640,
+    480
+  ],
+  "jpeg_quality": 92,
+  "dataset_hash": "15ae99da0b2a5318b10310f39af725f548e7bcb5a238ea6a74233d7958703e57"
+}

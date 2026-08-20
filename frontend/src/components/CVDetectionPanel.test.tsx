@@ -3,10 +3,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { CVDetectionPanel } from './CVDetectionPanel'
 import { api } from '../api/client'
-import type { Agent, CVSceneResult } from '../types'
+import type { Agent, CVSceneResult, CVStatus, CVTrainedResult } from '../types'
 
 vi.mock('../api/client', () => ({
-  api: { cvDetect: vi.fn() },
+  api: {
+    cvDetect: vi.fn(),
+    getCVStatus: vi.fn(),
+    cvDetectTrained: vi.fn(),
+    cvDemoImageUrl: vi.fn((id: string) => `/api/perception/cv/demo-image/${id}`),
+  },
 }))
 
 const agents: Agent[] = [
@@ -34,10 +39,57 @@ const sceneResult: CVSceneResult = {
 
 const onComplete = vi.fn<(result: CVSceneResult) => void>()
 
+const cvStatus: CVStatus = {
+  provider_preference: 'mock',
+  model_available: true,
+  model_loaded: true,
+  model_path: 'models/cv_detector/best.pt',
+  model_version: 'cv_yolo_8.4.123',
+  class_names: ['person', 'risk_object', 'vehicle'],
+  conf_threshold: 0.25,
+  unavailable_reason: null,
+  last_inference: null,
+}
+
+// Trained CV 真实推理响应（置信度刻意不同于 Mock 预设 96/94/92/89，
+// 用于断言 UI 数值完全来自 API 响应而非前端伪造）
+const trainedResult: CVTrainedResult = {
+  provider: 'real',
+  model_invoked: true,
+  model_path: 'models/cv_detector/best.pt',
+  model_version: 'cv_yolo_8.4.123',
+  synthetic_visual_data: true,
+  scene_id: 'demo_high_risk',
+  conf_threshold: 0.25,
+  latency_ms: 42.5,
+  detections: [
+    { id: 'cv_det_001', label: 'person', confidence: 0.872, bbox: { x: 0.16, y: 0.24, width: 0.13, height: 0.49 }, subject_id: 'agent_A', synthetic: true },
+    { id: 'cv_det_002', label: 'person', confidence: 0.791, bbox: { x: 0.45, y: 0.28, width: 0.12, height: 0.46 }, subject_id: 'agent_B', synthetic: true },
+    { id: 'cv_det_003', label: 'risk_object', confidence: 0.634, bbox: { x: 0.62, y: 0.66, width: 0.19, height: 0.14 }, subject_id: 'agent_A', synthetic: true },
+  ],
+  events: [
+    { id: 'e1', type: 'PersonDetected', subject_id: 'agent_A', object_id: null, timestamp: '', confidence: 0.872, source: 'real_cv', metadata: {} },
+    { id: 'e2', type: 'PersonDetected', subject_id: 'agent_B', object_id: null, timestamp: '', confidence: 0.791, source: 'real_cv', metadata: {} },
+    { id: 'e3', type: 'RiskObjectDetected', subject_id: 'agent_A', object_id: null, timestamp: '', confidence: 0.634, source: 'real_cv', metadata: {} },
+  ],
+  crowd: {
+    person_count: 3,
+    max_pair_distance: 0.29,
+    confidence: 0.791,
+    bbox: { x: 0.16, y: 0.24, width: 0.41, height: 0.5 },
+    centroid: [0.36, 0.49],
+    detection_ids: ['cv_det_001', 'cv_det_002'],
+  },
+}
+
 beforeEach(() => {
   vi.useFakeTimers()
   vi.mocked(api.cvDetect).mockReset()
   vi.mocked(api.cvDetect).mockResolvedValue(sceneResult)
+  vi.mocked(api.getCVStatus).mockReset()
+  vi.mocked(api.getCVStatus).mockResolvedValue(cvStatus)
+  vi.mocked(api.cvDetectTrained).mockReset()
+  vi.mocked(api.cvDetectTrained).mockResolvedValue(trainedResult)
   onComplete.mockClear()
 })
 
@@ -188,5 +240,128 @@ describe('CVDetectionPanel', () => {
     expect(document.querySelectorAll('.cv-box')).toHaveLength(0)
     expect(document.querySelector('.cv-result')).toBeNull()
     expect(onComplete).not.toHaveBeenCalled()
+  })
+})
+
+describe('CVDetectionPanel · Trained CV mode', () => {
+  it('shows the provider selector with Mock CV active by default', () => {
+    renderPanel()
+    expect(screen.getByTestId('cv-mode-mock').className).toContain('active')
+    expect(screen.getByTestId('cv-mode-trained').className).not.toContain('active')
+    // mock 模式显示 CSS 合成监控画面，而不是真实 demo 图
+    expect(document.querySelector('.cv-trained-image')).toBeNull()
+    expect(screen.getByText('CAM-DEMO-01 · 学校周边模拟监控 · 广州演示场景')).toBeTruthy()
+  })
+
+  it('switching to Trained CV loads the synthetic demo image and 运行训练模型 button', async () => {
+    renderPanel()
+    fireEvent.click(screen.getByTestId('cv-mode-trained'))
+    expect(screen.getByTestId('cv-mode-trained').className).toContain('active')
+    expect(screen.getByTestId('cv-mode-mock').className).not.toContain('active')
+    const image = document.querySelector<HTMLImageElement>('.cv-trained-image')
+    expect(image).toBeTruthy()
+    expect(image!.src).toContain('/api/perception/cv/demo-image/demo_high_risk')
+    expect(screen.getByTestId('cv-run-trained')).toBeTruthy()
+    expect(screen.getByText('运行训练模型')).toBeTruthy()
+    expect(screen.getByText('CAM-DEMO-02 · 独立合成测试图 · 训练模型真实推理')).toBeTruthy()
+  })
+
+  it('clicking 运行训练模型 calls /cv/detect-image once and renders real boxes from the response', async () => {
+    renderPanel()
+    fireEvent.click(screen.getByTestId('cv-mode-trained'))
+    fireEvent.click(screen.getByTestId('cv-run-trained'))
+    expect(screen.getByText('训练模型推理中（YOLO.predict）…')).toBeTruthy()
+    await act(async () => {})
+
+    expect(api.cvDetectTrained).toHaveBeenCalledTimes(1)
+    expect(api.cvDetectTrained).toHaveBeenCalledWith('demo_high_risk', ['agent_A', 'agent_B', 'agent_C'], expect.any(AbortSignal))
+    // real 模式绝不调用 mock 端点
+    expect(api.cvDetect).not.toHaveBeenCalled()
+
+    const boxes = screen.getAllByTestId('cv-trained-box')
+    expect(boxes).toHaveLength(3)
+    // bbox 定位与置信度全部来自响应（0.872 -> 87%，0.791 -> 79%，0.634 -> 63%）
+    const personBox = boxes[0]
+    expect(parseFloat(personBox.style.left)).toBeCloseTo(16, 2)
+    expect(parseFloat(personBox.style.width)).toBeCloseTo(13, 2)
+    expect(screen.getByText('87%')).toBeTruthy()
+    // 第二个 person 79% 与 crowd 聚合置信度（取 person 最小值 0.791）同值，允许重复
+    expect(screen.getAllByText('79%').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText('63%')).toBeTruthy()
+    // 前端禁止伪造：Mock 预设置信度不得出现
+    expect(screen.queryByText('96%')).toBeNull()
+    expect(screen.queryByText('89%')).toBeNull()
+    expect(document.querySelector('.cv-box-risk_object b')!.textContent).toBe('疑似风险物品')
+  })
+
+  it('shows REAL MODEL badge with model metadata after real inference', async () => {
+    renderPanel()
+    fireEvent.click(screen.getByTestId('cv-mode-trained'))
+    fireEvent.click(screen.getByTestId('cv-run-trained'))
+    await act(async () => {})
+
+    expect(screen.getByTestId('cv-provider-badge').textContent).toBe('REAL MODEL')
+    expect(document.body.textContent).toContain('model_invoked: true')
+    expect(document.body.textContent).toContain('cv_yolo_8.4.123')
+    // crowd 聚合框由感知层规则渲染（非模型输出）
+    expect(screen.getByTestId('cv-crowd-agg')).toBeTruthy()
+    expect(document.body.textContent).toContain('感知层聚合')
+    expect(screen.getAllByText('PersonDetected')).toHaveLength(2)
+    expect(screen.getByText('RiskObjectDetected')).toBeTruthy()
+  })
+
+  it('shows MOCK FALLBACK badge (never Trained CV) when the model is unavailable', async () => {
+    vi.mocked(api.cvDetectTrained).mockResolvedValue({
+      ...trainedResult,
+      provider: 'mock_fallback',
+      model_invoked: false,
+      model_version: null,
+      latency_ms: undefined,
+      conf_threshold: undefined,
+      fallback_reason: 'model file missing',
+      crowd: null,
+      detections: trainedResult.detections.slice(0, 1),
+      events: trainedResult.events.slice(0, 1),
+    })
+    renderPanel()
+    fireEvent.click(screen.getByTestId('cv-mode-trained'))
+    fireEvent.click(screen.getByTestId('cv-run-trained'))
+    await act(async () => {})
+
+    expect(screen.getByTestId('cv-provider-badge').textContent).toBe('MOCK FALLBACK')
+    expect(document.body.textContent).toContain('model_invoked: false')
+    expect(document.body.textContent).toContain('model file missing')
+    expect(document.body.textContent).not.toContain('REAL MODEL')
+    expect(screen.queryByTestId('cv-crowd-agg')).toBeNull()
+  })
+
+  it('confidences come from the API response, not preset values (confidence source)', async () => {
+    vi.mocked(api.cvDetectTrained).mockResolvedValue({
+      ...trainedResult,
+      detections: [
+        { id: 'cv_det_001', label: 'person', confidence: 0.4213, bbox: { x: 0.2, y: 0.2, width: 0.1, height: 0.4 }, subject_id: 'agent_A', synthetic: true },
+      ],
+      events: [],
+      crowd: null,
+    })
+    renderPanel()
+    fireEvent.click(screen.getByTestId('cv-mode-trained'))
+    fireEvent.click(screen.getByTestId('cv-run-trained'))
+    await act(async () => {})
+
+    expect(screen.getByText('42%')).toBeTruthy()
+    expect(screen.queryByText('87%')).toBeNull()
+  })
+
+  it('surfaces trained inference API failures without crashing', async () => {
+    vi.mocked(api.cvDetectTrained).mockRejectedValue(new Error('API 503'))
+    renderPanel()
+    fireEvent.click(screen.getByTestId('cv-mode-trained'))
+    fireEvent.click(screen.getByTestId('cv-run-trained'))
+    await act(async () => {})
+
+    expect(screen.getByText('API 503')).toBeTruthy()
+    expect(screen.getByTestId('cv-run-trained')).toBeTruthy()
+    expect(screen.queryByTestId('cv-provider-badge')).toBeNull()
   })
 })

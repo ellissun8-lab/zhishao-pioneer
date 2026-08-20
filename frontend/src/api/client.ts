@@ -1,4 +1,4 @@
-import type { CVSceneResult, MLRecommend, MLRiskPrediction, MLStatus, Prediction, SimulationResult, Strategy, WorldState } from '../types'
+import type { CVSceneResult, CVStatus, CVTrainedResult, MLRecommend, MLRiskPrediction, MLStatus, Prediction, SimulationResult, Strategy, WorldState } from '../types'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
@@ -38,6 +38,21 @@ export const api = {
       body: JSON.stringify({ scene_id: sceneId, subject_ids: subjectIds }),
       signal,
     }),
+  getCVStatus: () => request<CVStatus>('/api/perception/cv/status'),
+  // Trained CV：multipart 上传 demo_scene_id + provider=real，后端真实调用 YOLO.predict
+  cvDetectTrained: (demoSceneId: string, subjectIds: string[], signal?: AbortSignal) => {
+    const form = new FormData()
+    form.append('demo_scene_id', demoSceneId)
+    form.append('provider', 'real')
+    if (subjectIds.length > 0) form.append('subject_ids', subjectIds.join(','))
+    return fetch(`${API_BASE}/api/perception/cv/detect-image`, { method: 'POST', body: form, signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`API ${response.status}: ${await response.text()}`)
+        return response.json() as Promise<CVTrainedResult>
+      })
+  },
+  cvDemoImageUrl: (demoSceneId: string) =>
+    `${API_BASE}/api/perception/cv/demo-image/${demoSceneId}`,
   chat: (message: string) =>
     request<{ answer: string }>('/api/chat', { method: 'POST', body: JSON.stringify({ message }) }),
   getMLStatus: () => request<MLStatus>('/api/ml/status'),

@@ -2,6 +2,7 @@ from ..behavior.prediction import predict_world_state
 from ..ml import registry
 from ..ml.episodes import DEFAULT_INTERVENTION_COST_WEIGHT
 from ..ml.features import extract_features
+from ..perception import real_cv
 from ..simulation.engine import SimulationEngine
 from ..simulation.strategies import Strategy
 from ..world.state import WorldState
@@ -22,6 +23,20 @@ class AgentTools:
 
     def get_risk_analysis(self):
         return self.state.risk_state
+
+    def get_cv_detection_summary(self) -> dict[str, object]:
+        """最近一次 CV 推理摘要（来自 RealCVProvider 真实推理记录）。
+
+        绝不把 MockCV 输出说成 Trained CV：summary.provider 会如实标注
+        real / mock_fallback，且 model_invoked 只有真实调用 YOLO.predict 才为 True。
+        """
+        summary = real_cv.get_last_detection_summary()
+        if summary is None:
+            return {
+                "available": False,
+                "note": "尚未执行任何 CV 推理；请先在 CV 智能感知面板运行 Mock CV 或 Trained CV。",
+            }
+        return {"available": True, **summary}
 
     def predict_future(self, horizon_minutes: int = 10):
         return predict_world_state(self.state, horizon_minutes)

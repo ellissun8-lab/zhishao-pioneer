@@ -1,0 +1,9 @@
+# Ultralytics YOLO detection format (synthetic training dataset)
+path: D:/工作/黑客松/data/cv_synthetic
+train: images/train
+val: images/val
+test: images/test
+names:
+  0: person
+  1: risk_object
+  2: vehicle

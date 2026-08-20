@@ -21,3 +21,15 @@ models_smoke/
 data/models_smoke/
 data/synthetic_smoke/
 
+# CV 合成数据集（images/labels 不入库；可用脚本确定性重建：
+#   python scripts/generate_cv_dataset.py --images 50000 --seed 42
+#   python scripts/generate_cv_dataset.py --images 5000 --seed 2026 --ood --out data/cv_synthetic_ood
+# data.yaml / dataset_card.md / stats.json / demo 图 提交入库以便复现验证）
+data/cv_synthetic/images/
+data/cv_synthetic/labels/
+data/cv_synthetic_ood/images/
+data/cv_synthetic_ood/labels/
+# 本地训练运行目录（正式产物 models/cv_detector/best.pt + metrics.json 随仓库发布）
+runs/
+# 根目录 Ultralytics 预训练权重（训练时自动下载；正式模型在 models/cv_detector/）
+/yolo*.pt

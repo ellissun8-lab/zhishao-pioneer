@@ -13,6 +13,7 @@ STRATEGY_LABELS = {
 ML_MARKERS = ("训练模型", "模型", "机器学习")
 RECOMMEND_MARKERS = ("推荐", "建议", "措施", "策略")
 PREDICT_MARKERS = ("预测", "风险", "未来", "分钟", "多少")
+CV_MARKERS = ("视觉", "检测到", "摄像头", "画面", "目标检测", "cv")
 
 
 def _predict_horizon(question: str) -> int:
@@ -106,9 +107,51 @@ def _ml_risk_answer(tools: AgentTools, question: str) -> dict[str, object]:
     return {"answer": answer, "tools_used": ["ml_predict_risk"], "synthetic": True, "ml_prediction": prediction}
 
 
+def _cv_detection_answer(tools: AgentTools) -> dict[str, object]:
+    """视觉模型检测路径：读取最近一次 CV 推理摘要，绝不把 MockCV 说成 Trained CV。"""
+    summary = tools.get_cv_detection_summary()
+    if not summary.get("available"):
+        return {
+            "answer": f"{summary['note']} 该回答基于 get_cv_detection_summary 工具，尚无 CV 推理记录。",
+            "tools_used": ["get_cv_detection_summary"],
+            "synthetic": True,
+            "cv_summary": summary,
+        }
+    labels = list(summary.get("labels") or [])
+    confidences = list(summary.get("confidences") or [])
+    detail_line = "、".join(
+        f"{label} {float(confidence):.0%}" for label, confidence in zip(labels, confidences)
+    ) or "无任何 Detection"
+    if summary.get("provider") == "real" and summary.get("model_invoked"):
+        provider_line = (
+            f"Trained CV（{summary.get('model_version') or 'real model'}）在最近一次真实推理"
+            f"（YOLO.predict，场景 {summary.get('scene_id')}，耗时 {summary.get('latency_ms')}ms）中检测到 "
+            f"{summary.get('detection_count', 0)} 个目标：{detail_line}。"
+        )
+    else:
+        provider_line = (
+            f"最近一次 CV 结果来自 Mock Fallback（模型未真实调用，model_invoked=false，"
+            f"原因：{summary.get('fallback_reason') or '模型不可用'}），并非 Trained CV 输出；"
+            f"该次共 {summary.get('detection_count', 0)} 个 Detection：{detail_line}。"
+        )
+    crowd = summary.get("crowd")
+    crowd_line = (
+        f"感知层聚合出多人聚集（{crowd.get('person_count')} 人，成对中心距 {crowd.get('max_pair_distance')}）。"
+        if crowd
+        else "未触发感知层聚集聚合。"
+    )
+    answer = (
+        f"{provider_line}{crowd_line}"
+        "以上均来自 Synthetic Visual Data 的 CV 推理记录，仅用于模型验证。"
+    )
+    return {"answer": answer, "tools_used": ["get_cv_detection_summary"], "synthetic": True, "cv_summary": summary}
+
+
 def explain_question(question: str, state: WorldState) -> dict[str, object]:
     tools = AgentTools(state)
     normalized = question.lower()
+    if any(marker in normalized for marker in CV_MARKERS) or any(marker in question for marker in CV_MARKERS[:5]):
+        return _cv_detection_answer(tools)
     if _is_ml_question(question) and any(marker in question for marker in RECOMMEND_MARKERS):
         return _ml_recommendation_answer(tools)
     if _is_ml_question(question) and any(marker in question for marker in PREDICT_MARKERS):

@@ -1,0 +1,126 @@
+{
+  "model_version": "cv_yolo_8.4.123",
+  "base_model": "yolo26n.pt",
+  "ultralytics_version": "8.4.123",
+  "torch_version": "2.11.0+cu128",
+  "training_seed": 42,
+  "epochs": 40,
+  "imgsz": 640,
+  "batch": 32,
+  "hardware": "NVIDIA GeForce RTX 5080 (CUDA)",
+  "dataset": "data/cv_synthetic/data.yaml",
+  "dataset_hash": "e780807538d213731313ed672769cdd909599c3ad6e03ea3ffcd5bd219c1b1d4",
+  "trained_at": "2026-08-20T10:48:14.843023+00:00",
+  "class_names": [
+    "person",
+    "risk_object",
+    "vehicle"
+  ],
+  "val_metrics": {
+    "mAP50": 0.9205,
+    "mAP50-95": 0.8857,
+    "precision": 0.9866,
+    "recall": 0.8968
+  },
+  "note": "val_metrics 是训练期 val split 过程指标；正式 test/OOD 指标由 scripts/evaluate_cv_model.py 写入 test_metrics/ood_metrics",
+  "model_file": "models/cv_detector/best.pt",
+  "model_size_mb": 5.16,
+  "test_metrics": {
+    "mAP50-95": 0.8852,
+    "mAP50": 0.9223,
+    "mAP75": 0.9044,
+    "precision": 0.9872,
+    "recall": 0.899,
+    "per_class_ap50-95": {
+      "person": 0.8067,
+      "risk_object": 0.8818,
+      "vehicle": 0.967
+    },
+    "confusion_matrix": {
+      "labels": [
+        "person",
+        "risk_object",
+        "vehicle",
+        "background"
+      ],
+      "matrix": [
+        [
+          11494.0,
+          0.0,
+          0.0,
+          474.0
+        ],
+        [
+          0.0,
+          4005.0,
+          0.0,
+          162.0
+        ],
+        [
+          0.0,
+          0.0,
+          4395.0,
+          104.0
+        ],
+        [
+          2083.0,
+          430.0,
+          145.0,
+          0.0
+        ]
+      ]
+    }
+  },
+  "ood_metrics": {
+    "mAP50-95": 0.8454,
+    "mAP50": 0.8925,
+    "mAP75": 0.8695,
+    "precision": 0.9827,
+    "recall": 0.8646,
+    "per_class_ap50-95": {
+      "person": 0.7419,
+      "risk_object": 0.8342,
+      "vehicle": 0.9602
+    },
+    "confusion_matrix": {
+      "labels": [
+        "person",
+        "risk_object",
+        "vehicle",
+        "background"
+      ],
+      "matrix": [
+        [
+          9114.0,
+          0.0,
+          0.0,
+          490.0
+        ],
+        [
+          0.0,
+          3365.0,
+          0.0,
+          155.0
+        ],
+        [
+          0.0,
+          0.0,
+          3866.0,
+          92.0
+        ],
+        [
+          2374.0,
+          537.0,
+          144.0,
+          0.0
+        ]
+      ]
+    }
+  },
+  "inference": {
+    "ms_per_image": 7.57,
+    "sample_count": 100,
+    "device": "cuda:0"
+  },
+  "evaluated_at": "2026-08-20T10:52:38.226693+00:00"
+}

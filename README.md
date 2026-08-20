@@ -53,6 +53,7 @@ npm run build
 - `GET /api/world/predict?horizon_minutes=10`：未来状态预测（5/10/30 分钟）
 - `POST /api/simulation/run`、`GET /api/simulation/compare`：What-if（在 World State 深拷贝上运行，不影响实时状态）
 - `POST /api/perception/mock`：Mock CV 感知（person / vehicle / crowd / risk_object；crowd 产出感知层 CrowdDetected）
+- `POST /api/perception/cv/detect-image`：Trained CV 真实 YOLO 推理（见下文 Synthetic CV Training Pipeline）
 - `POST /api/chat`：基于工具结果的风险解释与预测问答
 
 架构、规则、来源、演示方式分别见 [本体](docs/ontology.md)、[行为模型](docs/behavior-model.md)、[数据来源](docs/data-sources.md)、[演示脚本](docs/demo-script.md)。
@@ -100,3 +101,46 @@ ML 相关 API：
 Agent Tools：`ml_predict_risk` / `ml_recommend_strategy`（World State -> 特征提取 -> 训练模型 -> 带 `model_version` 与 `synthetic_training: true` 的 Tool Response；推荐结果必须再经 What-if 仿真验证后解释）。
 
 > 声明：Risk 标签由透明规则 World Behavior Model 生成，ML 风险模型是该规则的 surrogate/distilled 逼近，**不代表真实城市预测精度**；Policy 标签来自 What-if 仿真 utility。全部训练数据 100% Synthetic（详见 `data/synthetic/dataset_card.md` 与 `docs/model-evaluation.md`）。
+
+## Synthetic CV Training Pipeline
+
+在 Mock CV 之外，提供完整的**真实目标检测训练管线**：程序化合成 50,000 张视觉数据 -> Ultralytics YOLO 训练 -> test split 独立评估 + OOD 评估 -> `RealCVProvider` 真实推理（`YOLO.predict`，绝不预设 Detection）-> 标准事件 -> Event Bus -> World State / Risk / Agent。
+
+- 数据集：50,000 张 / 149,751 bbox 实例，仅 3 类 `person / risk_object / vehicle`（`crowd` 是感知层聚合结果，绝不是训练类别）；person 为 anonymous synthetic silhouette，risk_object 为抽象物品（UI 文案「疑似风险物品」）。详见 `docs/cv-dataset-card.md`。
+- 分层约束：模型只产出 PersonDetected / RiskObjectDetected / VehicleDetected；CrowdDetected 由感知聚合（>=3 person + 空间距离阈值）产生；CrowdGathered 永远由行为/空间规则层确认。
+- 指标诚实声明：所有指标均为 **Synthetic-domain CV accuracy**（含 OOD），不代表真实监控场景准确率；即便 mAP50 > 0.95 也不表述为「真实场景准确率 95%」。详见 `docs/cv-model-evaluation.md`。
+
+**一键复现（fresh clone）：**
+
+```powershell
+pip install -r backend/requirements.txt   # 含 ultralytics / opencv-python-headless / Pillow
+
+# 1. 生成 50,000 张合成数据（seed=42 确定性；同 seed -> 同 dataset_hash）
+python scripts/generate_cv_dataset.py --images 50000 --seed 42
+# OOD 评估集（seed=2026，分布偏移，不参与训练）
+python scripts/generate_cv_dataset.py --images 5000 --seed 2026 --ood --out data/cv_synthetic_ood
+# Dashboard Trained CV 演示图（已随仓库提交于 data/cv_demo/）
+python scripts/generate_cv_dataset.py --demo
+
+# 2. 训练（GPU 自动检测；CPU 可用 --epochs 5 做 smoke；只用 train+val，test 保留独立评估）
+python scripts/train_cv_model.py --data data/cv_synthetic/data.yaml \
+    --epochs 40 --imgsz 640 --batch 32 --workers 4 --seed 42
+
+# 3. 独立评估（test split + OOD split + 推理延迟，写入 models/cv_detector/metrics.json）
+python scripts/evaluate_cv_model.py --data data/cv_synthetic/data.yaml --ood-data data/cv_synthetic_ood/data.yaml
+```
+
+`images/` 与 `labels/` 不入库（可确定性重建）；模型产物 `models/cv_detector/best.pt`（约 5MB）与 `metrics.json`（含 model_version / training_seed / dataset_hash / 指标 / ultralytics 版本 / SHA256 记录于 `docs/cv-model-evaluation.md`）随仓库提交，fresh clone 可直接推理无需重训。
+
+CV 相关 API：
+
+- `POST /api/perception/cv/detect-image`：Trained CV 真实推理（multipart：`demo_scene_id` 或图片上传 + 可选 `provider=real|mock`、`subject_ids`、`conf`）。响应 `provider="real", model_invoked=true` **只在真实执行 `YOLO.predict` 成功后出现**；模型缺失/加载失败时显式回退 `provider="mock_fallback", model_invoked=false`。
+- `GET /api/perception/cv/status`：模型可用性与最近一次推理摘要（UI REAL MODEL / MOCK FALLBACK 徽标数据源）。
+- `GET /api/perception/cv/demo-image/{scene_id}`：合成 demo 测试图（Trained CV 模式输入）。
+- `POST /api/perception/mock-cv/detect`：Mock CV 场景识别（原有路径保留）。
+
+环境变量 `CV_PROVIDER=mock|real`（默认 mock）控制默认 provider；Dashboard「CV 智能感知」面板提供 `[Mock CV] / [Trained CV]` 切换，Trained CV 模式点击「运行训练模型」即触发真实模型推理，检测框/置信度全部渲染自 API 响应（前端禁止伪造）。
+
+Agent Tools：`get_cv_detection_summary`（「视觉模型检测到了什么？」——读取最近一次 CV 推理记录；provider 与 model_invoked 如实标注，绝不把 MockCV 输出说成 Trained CV）。
+
+> **第三方依赖声明**：目标检测使用 [Ultralytics YOLO](https://github.com/ultralytics/ultralytics)（第三方库，**AGPL-3.0 许可证**，版权归 Ultralytics Inc. 所有），本项目仅作为依赖调用、未修改其源码；合成图像渲染使用 Pillow（MIT-CMU License）与 OpenCV（Apache-2.0，`opencv-python-headless`）。内置 `yolo26n.pt` 预训练权重同样来自 Ultralytics 并遵循其许可条款。
