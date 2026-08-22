@@ -86,7 +86,11 @@ export type SimulationResult = {
   synthetic: true
 }
 
-export type ChatMessage = { role: 'user' | 'assistant'; content: string }
+export type ChatMessage = {
+  role: 'user' | 'assistant'
+  content: string
+  meta?: { provider?: string; tools?: string[]; llmEnabled?: boolean }
+}
 
 export type CVLabel = 'person' | 'crowd' | 'risk_object' | 'vehicle'
 

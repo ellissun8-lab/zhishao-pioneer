@@ -1,11 +1,11 @@
 import { FormEvent, useState } from 'react'
 import type { ChatMessage } from '../types'
 
-type Props = { messages: ChatMessage[]; busy: boolean; onSend: (message: string) => void }
+type Props = { messages: ChatMessage[]; busy: boolean; onSend: (message: string) => void; onViewTrace?: (message: ChatMessage) => void }
 
 const suggestions = ['为什么风险升高？', '为什么学校区域现在是红色？', '未来10分钟会怎样？', '如果现在发送预警，会发生什么？']
 
-export function ChatPanel({ messages, busy, onSend }: Props) {
+export function ChatPanel({ messages, busy, onSend, onViewTrace }: Props) {
   const [input, setInput] = useState('')
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -16,15 +16,25 @@ export function ChatPanel({ messages, busy, onSend }: Props) {
   }
   return (
     <section className="panel chat-panel">
-      <div className="panel-heading"><span>推演 Agent</span><em><i className="online-dot" /> 工具在线</em></div>
+      <div className="panel-heading"><span>智能研判</span><em><i className="online-dot" /> 工具在线</em></div>
       <div className="chat-messages" aria-live="polite">
         {messages.length === 0 ? (
-          <div className="agent-intro"><div>哨</div><p>我只基于 World State 和模拟工具解释风险，不会凭空生成结论。</p></div>
-        ) : messages.map((message, index) => <div key={`${message.role}-${index}`} className={`message ${message.role}`}>{message.content}</div>)}
+          <div className="agent-intro"><div className="agent-intro-logo"><img src="/logo-cityos.png" alt="智哨先锋标志" /></div><p>我只基于世界状态和模拟工具解释风险，不会凭空生成结论。</p></div>
+        ) : messages.map((message, index) => (
+          <div key={`${message.role}-${index}`} className={`message ${message.role}`}>
+            <div>{message.content}</div>
+            {message.role === 'assistant' && message.meta && (
+              <div className="message-meta">
+                <small>{message.meta.llmEnabled ? '千问模型' : '本地规则解释'}{message.meta.tools?.length ? ` · ${message.meta.tools.length} 个工具` : ''}</small>
+                {onViewTrace && (message.meta.tools?.length || message.meta.llmEnabled) ? <button type="button" onClick={() => onViewTrace(message)}>查看调用链</button> : null}
+              </div>
+            )}
+          </div>
+        ))}
       </div>
       <div className="suggestions">{suggestions.map((text) => <button type="button" key={text} onClick={() => onSend(text)} disabled={busy}>{text}</button>)}</div>
       <form onSubmit={submit}>
-        <input value={input} onChange={(event) => setInput(event.target.value)} placeholder="询问当前风险或干预效果…" aria-label="向推演 Agent 提问" />
+        <input value={input} onChange={(event) => setInput(event.target.value)} placeholder="询问当前风险或干预效果…" aria-label="向智能研判提问" />
         <button type="submit" disabled={busy || !input.trim()} aria-label="发送问题">↑</button>
       </form>
     </section>

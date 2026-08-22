@@ -13,7 +13,7 @@ export function AgentMarker({ agent, onSelect }: Props) {
       style={position}
       onClick={() => onSelect(agent)}
       aria-label={`查看 ${agentDisplayName(agent)} 模拟主体`}
-      title={`${agentDisplayName(agent)} · Synthetic Data`}
+      title={`${agentDisplayName(agent)} · 模拟数据`}
     >
       <span />
     </button>

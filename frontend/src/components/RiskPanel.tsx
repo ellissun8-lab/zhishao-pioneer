@@ -1,4 +1,5 @@
 import type { RiskState } from '../types'
+import { ruleLabel } from '../labels'
 
 export function RiskPanel({ risk }: { risk: RiskState }) {
   const circumference = 289
@@ -16,7 +17,7 @@ export function RiskPanel({ risk }: { risk: RiskState }) {
       <div className={`risk-label ${risk.level}`}>{risk.level === 'critical' ? '极高风险' : risk.level === 'high' ? '高风险' : risk.level === 'medium' ? '中风险' : '低风险'}</div>
       <div className="rule-list">
         {Object.entries(risk.rule_contributions).map(([rule, value]) => (
-          <div key={rule}><span>{rule.replaceAll('_', ' ')}</span><b>{rule.includes('multiplier') ? `×${value}` : `+${value}`}</b></div>
+          <div key={rule}><span>{ruleLabel(rule)}</span><b>{rule.includes('multiplier') ? `×${value}` : `+${value}`}</b></div>
         ))}
       </div>
     </section>

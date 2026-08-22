@@ -32,13 +32,13 @@ export function PredictionPanel({ currentRisk }: { currentRisk: number }) {
 
   return (
     <section className="panel prediction-panel">
-      <div className="panel-heading"><span>未来推演</span><em>WORLD BEHAVIOR MODEL</em></div>
+      <div className="panel-heading"><span>未来推演</span><em>行为预测模型</em></div>
       <div className="prediction-grid">
         {HORIZONS.map((horizon) => {
           const prediction = predictions[horizon]
           return (
             <button key={horizon} type="button" onClick={() => void run(horizon)} disabled={busy}>
-              <b>+{horizon} min</b>
+              <b>未来 {horizon} 分钟</b>
               {prediction ? (
                 <>
                   <strong className={prediction.risk_score > currentRisk ? 'worse' : prediction.risk_score < currentRisk ? 'better' : ''}>
@@ -59,7 +59,7 @@ export function PredictionPanel({ currentRisk }: { currentRisk: number }) {
           {busy ? '推演中…' : `预测 5 / 10 / 30 分钟（当前 ${currentRisk.toFixed(0)}）`}
         </button>
         {error ? <p className="prediction-error">{error}</p> : null}
-        {predictions[10]?.model ? <p className="prediction-model">模型：{predictions[10].model} · Synthetic Data</p> : null}
+        {predictions[10]?.model ? <p className="prediction-model">模型：{predictions[10].model} · 模拟数据</p> : null}
       </div>
     </section>
   )

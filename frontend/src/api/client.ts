@@ -39,5 +39,8 @@ export const api = {
       signal,
     }),
   chat: (message: string) =>
-    request<{ answer: string }>('/api/chat', { method: 'POST', body: JSON.stringify({ message }) }),
+    request<{ answer: string; provider?: string; tools_used?: string[]; llm_enabled?: boolean }>('/api/chat', {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    }),
 }

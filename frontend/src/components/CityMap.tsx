@@ -14,6 +14,7 @@ import {
 } from '../map/overlays'
 import type { Agent, Place, SimulationResult, WorldEvent, Zone } from '../types'
 import { AgentMarker } from './AgentMarker'
+import { eventTypeLabel, sourceLabel } from '../labels'
 
 type Props = {
   agents: Agent[]
@@ -29,6 +30,8 @@ type Props = {
 }
 
 type MapStatus = 'loading' | 'ready' | 'fallback'
+
+const strategyLabels: Record<string, string> = { none: '不干预', warn: '发送预警', guide_leave: '引导离开', intervene: '现场处置' }
 
 function fallbackEventPosition(event: WorldEvent, agents: Agent[], zones: Zone[]) {
   const agent = agents.find((item) => item.id === event.subject_id)
@@ -150,7 +153,7 @@ export function CityMap({
   return (
     <section className="map-shell" aria-label="城市空间态势地图">
       <div ref={containerRef} className={`amap-container ${mapStatus === 'fallback' ? 'is-hidden' : ''}`} />
-      {mapStatus === 'loading' ? <div className="map-loading">正在连接高德地图 JS API 2.0…</div> : null}
+      {mapStatus === 'loading' ? <div className="map-loading">正在连接地图服务…</div> : null}
       {mapStatus === 'fallback' ? (
         <div className="fallback-map">
           <div className="fallback-grid" />
@@ -180,14 +183,14 @@ export function CityMap({
                   y2={projectToPercent(fallbackSimulationEndpoint).top}
                 />
               </svg>
-              <span className="fallback-simulation-marker" style={projectToPercent(fallbackSimulationEndpoint)}>SIM</span>
+              <span className="fallback-simulation-marker" style={projectToPercent(fallbackSimulationEndpoint)}>推演</span>
             </>
           ) : null}
           {events.slice(-8).map((event) => (
-            <span key={event.id} className={`fallback-event event-${event.type}`} style={fallbackEventPosition(event, agents, zones)} title={`${event.type} · ${event.source}`}>!</span>
+            <span key={event.id} className={`fallback-event event-${event.type}`} style={fallbackEventPosition(event, agents, zones)} title={`${eventTypeLabel(event.type)} · ${sourceLabel(event.source)}`}>!</span>
           ))}
           <div className="fallback-note">
-            <b>高德地图当前不可用，已切换到 Demo 降级空间视图。</b>
+            <b>高德地图当前不可用，已切换到降级空间视图。</b>
             <span>{fallbackReason}</span>
           </div>
         </div>
@@ -195,7 +198,7 @@ export function CityMap({
 
       {simulationResult ? (
         <aside className="map-simulation-card" aria-label="模拟推演地图图层">
-          <div><b>模拟推演结果 / Simulation</b><span>{simulationResult.strategy.toUpperCase()}</span></div>
+          <div><b>模拟推演结果</b><span>{strategyLabels[simulationResult.strategy] ?? simulationResult.strategy}</span></div>
           <strong>{simulationResult.before.risk.toFixed(0)} <i>→</i> {simulationResult.after.risk.toFixed(0)}</strong>
           <button type="button" onClick={onCloseSimulation}>退出推演图层</button>
         </aside>
@@ -203,9 +206,9 @@ export function CityMap({
 
       <div className="map-topbar">
         <span className={`status-dot ${mapStatus}`} />
-        {mapStatus === 'ready' ? `${DEMO_MAP_CONFIG.city} · 高德地图在线` : mapStatus === 'fallback' ? 'Demo 降级空间视图' : '地图加载中'}
-        <span>{agents.length} 个模拟主体</span>
-        <strong>广州演示场景 · Synthetic Data</strong>
+        <span className="map-location">{mapStatus === 'ready' ? `${DEMO_MAP_CONFIG.city} · 高德地图在线` : mapStatus === 'fallback' ? '降级空间视图' : '地图加载中'}</span>
+        <span className="map-agent-count">{agents.length} 个模拟主体</span>
+        <strong>广州演示场景 · 模拟数据</strong>
       </div>
       <div className="map-legend">
         <span><i className="legend-dot high" />高风险</span>
@@ -213,7 +216,7 @@ export function CityMap({
         <span><i className="legend-dot low" />低风险</span>
         <span><i className="legend-line history" />历史轨迹</span>
         <span><i className="legend-line predicted" />模拟预测</span>
-        <span><i className="legend-line simulation" />Simulation</span>
+        <span><i className="legend-line simulation" />推演轨迹</span>
       </div>
     </section>
   )

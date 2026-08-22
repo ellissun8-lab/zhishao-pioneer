@@ -22,7 +22,7 @@ describe('buildAgentInfoWindowContent', () => {
   it('renders the Chinese display template for the required agent_50 case', () => {
     const html = buildAgentInfoWindowContent(baseAgent)
     expect(html).toContain('模拟人员050')
-    expect(html).toContain('agent_50 · Synthetic Data')
+    expect(html).toContain('agent_50 · 模拟主体')
     expect(html).toContain('低风险')
     expect(html).toContain('28.8')
     expect(html).toContain('静止')
