@@ -2,7 +2,12 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import type { ChatMessage, LLMStatus } from '../types'
 import { api } from '../api/client'
 
-type Props = { messages: ChatMessage[]; busy: boolean; onSend: (message: string) => void }
+type Props = {
+  messages: ChatMessage[]
+  busy: boolean
+  onSend: (message: string) => void
+  onViewTrace?: (message: ChatMessage) => void
+}
 
 const suggestions = ['为什么风险升高？', '训练模型认为未来10分钟风险多少？', '视觉模型检测到了什么？', '现在模型建议采取什么措施？']
 
@@ -15,7 +20,7 @@ function statusLabel(status: LLMStatus | null, failed: boolean): { text: string;
     : { text: '状态加载中…', className: 'llm-badge offline' }
 }
 
-export function ChatPanel({ messages, busy, onSend }: Props) {
+export function ChatPanel({ messages, busy, onSend, onViewTrace }: Props) {
   const [input, setInput] = useState('')
   const [llmStatus, setLlmStatus] = useState<LLMStatus | null>(null)
   const [statusFailed, setStatusFailed] = useState(false)
@@ -57,7 +62,7 @@ export function ChatPanel({ messages, busy, onSend }: Props) {
   return (
     <section className="panel chat-panel">
       <div className="panel-heading">
-        <span>推演 Agent</span>
+        <span>智能研判</span>
         <em><i className="online-dot" /> 工具在线</em>
       </div>
       <div className="llm-status" data-testid="llm-status">
@@ -97,7 +102,7 @@ export function ChatPanel({ messages, busy, onSend }: Props) {
       </div>
       <div className="chat-messages" aria-live="polite">
         {messages.length === 0 ? (
-          <div className="agent-intro"><div>哨</div><p>我只基于 World State 和模拟工具解释风险，不会凭空生成结论。</p></div>
+          <div className="agent-intro"><div className="agent-intro-logo"><img src="/logo-cityos.png" alt="智哨先锋标志" /></div><p>我只基于世界状态和模拟工具解释风险，不会凭空生成结论。</p></div>
         ) : messages.map((message, index) => (
           <div key={`${message.role}-${index}`} className={`message ${message.role}`}>
             <div>{message.content}</div>
@@ -115,6 +120,7 @@ export function ChatPanel({ messages, busy, onSend }: Props) {
                     ))}
                   </span>
                 )}
+                {onViewTrace ? <button type="button" onClick={() => onViewTrace(message)}>查看调用链</button> : null}
               </div>
             )}
           </div>

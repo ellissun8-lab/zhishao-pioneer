@@ -59,10 +59,10 @@ describe('overlapping AMap event markers', () => {
     expect(markers[1].getExtData()).toBe(risk)
 
     markers[0].click()
-    expect(infoWindow.setContent).toHaveBeenLastCalledWith(expect.stringContaining('CrowdDetected · Event'))
-    expect(infoWindow.setContent).not.toHaveBeenLastCalledWith(expect.stringContaining('RiskObjectDetected · Event'))
+    expect(infoWindow.setContent).toHaveBeenLastCalledWith(expect.stringContaining('感知人流聚集'))
+    expect(infoWindow.setContent).not.toHaveBeenLastCalledWith(expect.stringContaining('检测到风险物品'))
 
     markers[1].click()
-    expect(infoWindow.setContent).toHaveBeenLastCalledWith(expect.stringContaining('RiskObjectDetected · Event'))
+    expect(infoWindow.setContent).toHaveBeenLastCalledWith(expect.stringContaining('检测到风险物品'))
   })
 })

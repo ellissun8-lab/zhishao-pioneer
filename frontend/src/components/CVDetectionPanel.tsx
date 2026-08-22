@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api/client'
-import { agentDisplayName } from '../labels'
+import { agentDisplayName, eventTypeLabel } from '../labels'
 import type { Agent, CVBBox, CVDetection, CVLabel, CVSceneResult, CVStatus, CVTrainedResult, VisionAnalyzeResult } from '../types'
 
 type Phase = 'idle' | 'analyzing' | 'scanning' | 'detecting' | 'confidence' | 'submitting' | 'done'
@@ -66,7 +66,7 @@ const PHASE_TEXT: Record<Phase, string> = {
   detecting: '逐个定位检测目标…',
   confidence: '计算置信度…',
   submitting: '提交检测结果至后端…',
-  done: '识别完成 · 事件已进入 Event Bus',
+  done: '识别完成 · 事件已进入事件流',
 }
 
 function personName(index: number, subjects: Agent[]): string {
@@ -312,10 +312,10 @@ export function CVDetectionPanel({ agents, resetVersion, onComplete }: Props) {
     : null
 
   return (
-    <section className="panel cv-panel" aria-label="CV 智能感知">
+    <section className="panel cv-panel" aria-label="视觉感知">
       <div className="panel-heading">
-        <span>CV 智能感知</span>
-        <em>{mode === 'mock' ? 'MOCK CV · SYNTHETIC' : 'TRAINED CV · YOLO'}</em>
+        <span>视觉感知</span>
+        <em>{mode === 'mock' ? '模拟视觉 · 仅供演示' : 'TRAINED CV · YOLO'}</em>
       </div>
       <div className="cv-body">
         <div className="cv-mode-switch" role="group" aria-label="CV Provider 选择">
@@ -376,8 +376,8 @@ export function CVDetectionPanel({ agents, resetVersion, onComplete }: Props) {
                     )
                   })
                 : null}
-              <div className="cv-watermark">Synthetic Visual Data / 模拟视觉数据</div>
-              <div className="cv-cam">CAM-DEMO-01 · 学校周边模拟监控 · 广州演示场景</div>
+              <div className="cv-watermark"><span>模拟视觉数据</span><small>Synthetic Visual Data</small></div>
+              <div className="cv-cam"><span>监控点 01 · 学校周边模拟监控 · 广州演示场景</span><small>CAM-DEMO-01 · 学校周边模拟监控 · 广州演示场景</small></div>
             </div>
             <div className="cv-status" aria-live="polite">
               <span className={`cv-status-dot ${phase}`} />
@@ -405,7 +405,7 @@ export function CVDetectionPanel({ agents, resetVersion, onComplete }: Props) {
               <div className="cv-result">
                 <div className="cv-result-events">
                   {result.events.map((event) => (
-                    <span key={event.id} className={`cv-event-chip chip-${event.type}`}>{event.type}</span>
+                    <span key={event.id} className={`cv-event-chip chip-${event.type}`}>{eventTypeLabel(event.type)}</span>
                   ))}
                 </div>
                 <p>共 {result.detections.length} 个 Detection / {result.events.length} 个标准事件已通过 Event Bus 写入 World State（审计 source=mock_cv）。</p>

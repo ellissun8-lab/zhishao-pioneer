@@ -1,5 +1,5 @@
 import { DEMO_MAP_CONFIG } from '../config/map'
-import { agentDisplayName } from '../labels'
+import { agentDisplayName, eventTypeLabel, sourceLabel } from '../labels'
 import type { Agent, Place, Position, SimulationResult, WorldEvent, Zone } from '../types'
 import { circlePolygon, getSimulationEndpoint, lngLat } from './coordinates'
 import { buildAgentInfoWindowContent, buildEventInfoWindowContent, escapeHtml } from './infoWindow'
@@ -33,7 +33,7 @@ export function createAgentMarker(
   const color = agent.risk_level === 'high' ? '#ff5d46' : agent.risk_level === 'medium' ? '#ffb547' : '#65d99c'
   const marker = new AMap.Marker({
     position: lngLat(agent.position),
-    title: `${agentDisplayName(agent)} · Synthetic Data`,
+    title: `${agentDisplayName(agent)} · 模拟数据`,
     content: `<div class="amap-agent" style="--agent-color:${color}"><span></span></div>`,
     offset: new AMap.Pixel(-9, -9),
     zIndex: agent.risk_level === 'high' ? 120 : 100,
@@ -79,7 +79,7 @@ export function createPredictedTrack(AMap: any, agent: Agent): any[] {
     }),
     new AMap.Text({
       position: lngLat(agent.destination),
-      text: 'Predicted / 模拟预测',
+      text: '模拟预测',
       anchor: 'bottom-center',
       offset: new AMap.Pixel(0, -8),
       style: { color: '#f3c86a', background: '#111b1ddd', border: '1px solid #8c6a32', padding: '4px 7px', fontSize: '10px' },
@@ -93,10 +93,10 @@ export function createZoneOverlays(AMap: any, map: any, infoWindow: InfoWindowLi
   const openZone = () => {
     onClick(zone)
     showInfo(infoWindow, map, zone.center, `${zone.name} · ${displayId}`, [
-      ['World State ID', zone.id],
-      ['zone_type', zone.zone_type],
-      ['radius', `${zone.radius} m`],
-      ['sensitivity', zone.sensitivity],
+      ['区域编号', zone.id],
+      ['区域类型', zone.zone_type],
+      ['影响半径', `${zone.radius} 米`],
+      ['敏感度', zone.sensitivity],
     ])
   }
   const circle = new AMap.Circle({
@@ -108,7 +108,7 @@ export function createZoneOverlays(AMap: any, map: any, infoWindow: InfoWindowLi
     strokeOpacity: 0.45, strokeWeight: 1, strokeStyle: 'dashed', zIndex: 49,
   })
   const label = new AMap.Text({
-    position: lngLat(zone.center), text: `${displayId} · Synthetic Zone`, anchor: 'bottom-center',
+    position: lngLat(zone.center), text: `${displayId} · 模拟敏感区`, anchor: 'bottom-center',
     offset: new AMap.Pixel(0, -14),
     style: { color: '#ffb09f', background: '#241513dd', border: '1px solid #7b3d34', padding: '4px 7px', fontSize: '10px' },
     zIndex: 51,
@@ -188,7 +188,7 @@ export function createEventMarker(
   if (!position) return null
   const color = EVENT_COLORS[event.type]
   const marker = new AMap.Marker({
-    position: lngLat(position), title: `${event.type} · ${event.source}`,
+    position: lngLat(position), title: `${eventTypeLabel(event.type)} · ${sourceLabel(event.source)}`,
     content: `<div class="amap-event" style="--event-color:${color}">!</div>`,
     offset: new AMap.Pixel(renderOffset.x, renderOffset.y), zIndex: 150,
   })
@@ -215,12 +215,12 @@ export function createSimulationOverlays(
       extData: { kind: 'simulation', strategy: result.strategy },
     }),
     new AMap.Marker({
-      position: lngLat(endpoint), content: '<div class="amap-simulation-marker">SIM</div>',
-      offset: new AMap.Pixel(-17, -17), zIndex: 181, title: `Simulation · ${result.strategy}`,
+      position: lngLat(endpoint), content: '<div class="amap-simulation-marker">推演</div>',
+      offset: new AMap.Pixel(-17, -17), zIndex: 181, title: `模拟推演 · ${result.strategy}`,
     }),
     new AMap.Text({
       position: lngLat(endpoint),
-      text: `模拟推演结果 / Simulation · ${result.before.risk.toFixed(0)} → ${result.after.risk.toFixed(0)}`,
+      text: `模拟推演结果 · ${result.before.risk.toFixed(0)} → ${result.after.risk.toFixed(0)}`,
       anchor: 'bottom-center', offset: new AMap.Pixel(0, -24),
       style: { color: '#d4ceff', background: '#17142ddd', border: '1px solid #7369c6', padding: '5px 8px', fontSize: '10px' },
       zIndex: 182,

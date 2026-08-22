@@ -13,13 +13,14 @@ type Props = {
   busy: boolean
   onRun: (strategy: Strategy) => void
   onCompare: () => void
+  onViewResult?: (result: SimulationResult) => void
 }
 
-export function SimulationPanel({ results, selected, busy, onRun, onCompare }: Props) {
+export function SimulationPanel({ results, selected, busy, onRun, onCompare, onViewResult }: Props) {
   const resultByStrategy = new Map(results.map((result) => [result.strategy, result]))
   return (
     <section className="panel simulation-panel">
-      <div className="panel-heading"><span>What-if 推演</span><em>10 MIN</em></div>
+      <div className="panel-heading"><span>策略推演</span><em>未来 10 分钟</em></div>
       <div className="strategy-grid">
         {(Object.keys(strategyMeta) as Strategy[]).map((strategy) => {
           const meta = strategyMeta[strategy]
@@ -36,11 +37,12 @@ export function SimulationPanel({ results, selected, busy, onRun, onCompare }: P
       {results.length ? (
         <div className="comparison-bars">
           {results.map((result) => (
-            <div key={result.strategy}>
+            <button type="button" className="comparison-row" key={result.strategy} onClick={() => onViewResult?.(result)}>
               <span>{strategyMeta[result.strategy].label}</span>
               <i><b style={{ width: `${result.after.risk}%` }} /></i>
               <strong>{result.after.risk.toFixed(0)}</strong>
-            </div>
+              <small>详情</small>
+            </button>
           ))}
         </div>
       ) : null}

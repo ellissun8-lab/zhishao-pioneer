@@ -43,13 +43,13 @@ export function PredictionPanel({ currentRisk, resetVersion = 0 }: { currentRisk
 
   return (
     <section className="panel prediction-panel">
-      <div className="panel-heading"><span>规则世界模型预测</span><em>RULE WORLD MODEL</em></div>
+      <div className="panel-heading"><span>未来推演</span><em>规则世界模型</em></div>
       <div className="prediction-grid">
         {HORIZONS.map((horizon) => {
           const prediction = predictions[horizon]
           return (
-            <button key={horizon} type="button" onClick={() => void run(horizon)} disabled={busy}>
-              <b>+{horizon} min</b>
+            <button key={horizon} type="button" aria-label={`+${horizon} min 运行预测`} onClick={() => void run(horizon)} disabled={busy}>
+              <b>未来 {horizon} 分钟</b>
               {prediction ? (
                 <>
                   <strong className={prediction.risk_score > currentRisk ? 'worse' : prediction.risk_score < currentRisk ? 'better' : ''}>
@@ -70,7 +70,7 @@ export function PredictionPanel({ currentRisk, resetVersion = 0 }: { currentRisk
           {busy ? '推演中…' : `预测 5 / 10 / 30 分钟（当前 ${currentRisk.toFixed(0)}）`}
         </button>
         {error ? <p className="prediction-error">{error}</p> : null}
-        {predictions[10]?.model ? <p className="prediction-model">规则模型：{predictions[10].model} · Synthetic Data</p> : null}
+        {predictions[10]?.model ? <p className="prediction-model">规则模型：{predictions[10].model} · 模拟数据</p> : null}
       </div>
     </section>
   )

@@ -118,11 +118,11 @@ function renderPanel(resetVersion = 0) {
 }
 
 describe('CVDetectionPanel', () => {
-  it('renders the panel, scene buttons and Synthetic Visual Data mark', () => {
+  it('renders the panel, scene buttons and Chinese visual data mark', () => {
     renderPanel()
-    expect(screen.getByText('CV 智能感知')).toBeTruthy()
-    expect(screen.getByText('Synthetic Visual Data / 模拟视觉数据')).toBeTruthy()
-    expect(screen.getByText('CAM-DEMO-01 · 学校周边模拟监控 · 广州演示场景')).toBeTruthy()
+    expect(screen.getByText('视觉感知')).toBeTruthy()
+    expect(screen.getByText('模拟视觉数据')).toBeTruthy()
+    expect(screen.getByText('监控点 01 · 学校周边模拟监控 · 广州演示场景')).toBeTruthy()
     for (const name of ['正常场景', '人员聚集', '疑似风险物品', '综合高风险']) {
       expect(screen.getByRole('button', { name })).toBeTruthy()
     }
@@ -162,13 +162,13 @@ describe('CVDetectionPanel', () => {
     await advance(500)
     expect(api.cvDetect).toHaveBeenCalledTimes(1)
     expect(api.cvDetect).toHaveBeenCalledWith('scene_high_risk', ['agent_A', 'agent_B', 'agent_C'], expect.any(AbortSignal))
-    expect(screen.getByText('识别完成 · 事件已进入 Event Bus')).toBeTruthy()
+    expect(screen.getByText('识别完成 · 事件已进入事件流')).toBeTruthy()
     expect(screen.getByText('模拟人员001')).toBeTruthy()
     expect(screen.getByText('多人聚集')).toBeTruthy()
     // 场景按钮也叫「疑似风险物品」，这里断言的是检测框标题（不得显示确认刀具/武器）
     expect(document.querySelector('.cv-box-risk_object b')!.textContent).toBe('疑似风险物品')
     expect(screen.getByText('89%')).toBeTruthy()
-    expect(screen.getByText('CrowdDetected')).toBeTruthy()
+    expect(screen.getByText('感知人流聚集')).toBeTruthy()
     expect(onComplete).toHaveBeenCalledWith(sceneResult)
   })
 
