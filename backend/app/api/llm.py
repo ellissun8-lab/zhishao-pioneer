@@ -13,7 +13,7 @@ import re
 import time
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from ..llm.providers.qwen import QwenAPIError, get_qwen_provider
@@ -97,10 +97,25 @@ def _parse_vision_json(content: str) -> dict[str, Any] | None:
 
 def _coerce_vision_structured(parsed: dict[str, Any]) -> dict[str, Any]:
     """补齐/规范字段；synthetic_visual_data 恒为 true（输入就是合成图）。"""
+    people_value = parsed.get("estimated_people")
+    try:
+        estimated_people = max(0, int(people_value or 0))
+    except (TypeError, ValueError, OverflowError):
+        estimated_people = 0
+
+    def coerce_bool(value: Any) -> bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return value != 0
+        if isinstance(value, str):
+            return value.strip().lower() in {"true", "1", "yes", "是"}
+        return False
+
     return {
-        "estimated_people": int(parsed.get("estimated_people") or 0),
-        "vehicle_visible": bool(parsed.get("vehicle_visible")),
-        "possible_risk_object": bool(parsed.get("possible_risk_object")),
+        "estimated_people": estimated_people,
+        "vehicle_visible": coerce_bool(parsed.get("vehicle_visible")),
+        "possible_risk_object": coerce_bool(parsed.get("possible_risk_object")),
         "crowd_semantics": str(parsed.get("crowd_semantics") or ""),
         "summary": str(parsed.get("summary") or ""),
         "synthetic_visual_data": True,
@@ -112,7 +127,7 @@ def vision_analyze(request: VisionAnalyzeRequest) -> dict[str, Any]:
     provider = get_qwen_provider()
     started = time.perf_counter()
     if request.demo_scene_id not in DEMO_TO_MOCK_SCENE:
-        return {"fallback": True, "error": f"unknown demo scene: {request.demo_scene_id}"}
+        raise HTTPException(status_code=400, detail=f"unknown demo scene: {request.demo_scene_id}")
     if not provider.configured:
         return {
             "fallback": True,

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from ..ontology.models import Agent
 from ..service import world_service
@@ -7,7 +7,7 @@ router = APIRouter(prefix="/agents", tags=["agents"])
 
 
 @router.get("")
-def list_agents(limit: int = 80):
+def list_agents(limit: int = Query(default=80, ge=1, le=80)):
     return list(world_service.state.agents.values())[:limit]
 
 

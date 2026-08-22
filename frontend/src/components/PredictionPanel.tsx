@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
 import type { Prediction } from '../types'
 
@@ -6,17 +6,28 @@ const HORIZONS = [5, 10, 30] as const
 
 const trendLabel: Record<string, string> = { up: '↑ 上升', down: '↓ 回落', stable: '→ 稳定' }
 
-export function PredictionPanel({ currentRisk }: { currentRisk: number }) {
+export function PredictionPanel({ currentRisk, resetVersion = 0 }: { currentRisk: number; resetVersion?: number }) {
   const [predictions, setPredictions] = useState<Record<number, Prediction>>({})
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const generationRef = useRef(0)
+
+  useEffect(() => {
+    generationRef.current += 1
+    setPredictions({})
+    setError(null)
+    setBusy(false)
+  }, [resetVersion])
 
   async function run(horizon: number) {
+    const generation = generationRef.current
     try {
       const prediction = await api.predict(horizon)
+      if (generation !== generationRef.current) return
       setPredictions((current) => ({ ...current, [horizon]: prediction }))
       setError(null)
     } catch (caught) {
+      if (generation !== generationRef.current) return
       setError(caught instanceof Error ? caught.message : '预测失败')
     }
   }

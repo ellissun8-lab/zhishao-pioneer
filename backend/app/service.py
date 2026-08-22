@@ -25,6 +25,7 @@ class WorldService:
             self.runtime = SyntheticAgentRuntime(seed=seed or DEFAULT_RUNTIME_SEED)
             self.demo_step = 0
             self._alert_active = False
+            self._published_event_ids: set[str] = set()
 
     def add_agent(self, agent) -> object:
         with self._lock:
@@ -34,6 +35,14 @@ class WorldService:
             return agent
 
     def _publish_unlocked(self, event: Event) -> None:
+        if event.subject_id and event.subject_id not in self.state.agents:
+            raise ValueError(f"Unknown subject_id: {event.subject_id}")
+        if event.type in {EventType.ZONE_ENTERED, EventType.ZONE_EXITED}:
+            if not event.object_id or event.object_id not in self.state.zones:
+                raise ValueError(f"Unknown zone object_id: {event.object_id}")
+        if event.id in self._published_event_ids:
+            return
+        self._published_event_ids.add(event.id)
         self.event_bus.publish(event)
         record_event(event)
         self._maybe_alert_unlocked()
@@ -49,6 +58,7 @@ class WorldService:
                 metadata={"risk_score": score, "reason": "risk_state.overall_score >= 60"},
             )
             self.event_bus.publish(alert)
+            self._published_event_ids.add(alert.id)
             record_event(alert)
         elif score < ALERT_TRIGGER_SCORE:
             self._alert_active = False

@@ -1,7 +1,8 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from ..behavior.prediction import predict_world_state
+from ..perception import real_cv
 from ..service import world_service
 
 router = APIRouter(prefix="/world", tags=["world"])
@@ -18,13 +19,16 @@ def get_world_state():
 
 
 @router.get("/predict")
-def predict(horizon_minutes: int = 10):
+def predict(horizon_minutes: int = Query(default=10)):
+    if horizon_minutes not in {5, 10, 30}:
+        raise HTTPException(400, "horizon_minutes must be one of 5, 10, 30")
     return predict_world_state(world_service.state, horizon_minutes)
 
 
 @router.post("/reset")
 def reset(seed: int | None = None):
     world_service.reset(seed)
+    real_cv.clear_last_detection_summary()
     return world_service.state
 
 

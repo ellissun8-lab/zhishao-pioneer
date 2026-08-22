@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
 import type { MLRecommend, MLRiskPrediction, MLStatus } from '../types'
 
@@ -12,13 +12,14 @@ function formatConfidence(confidence: number): string {
   return `${(confidence * 100).toFixed(1)}%`
 }
 
-export function TrainedModelsPanel() {
+export function TrainedModelsPanel({ resetVersion = 0 }: { resetVersion?: number }) {
   const [status, setStatus] = useState<MLStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [recommend, setRecommend] = useState<MLRecommend | null>(null)
   const [mlPrediction, setMLPrediction] = useState<MLRiskPrediction | null>(null)
   const [busy, setBusy] = useState(false)
   const [predicting, setPredicting] = useState(false)
+  const generationRef = useRef(0)
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -30,29 +31,41 @@ export function TrainedModelsPanel() {
   }, [])
 
   useEffect(() => {
+    generationRef.current += 1
+    setRecommend(null)
+    setMLPrediction(null)
+    setError(null)
     void refreshStatus()
-  }, [refreshStatus])
+  }, [refreshStatus, resetVersion])
 
   async function requestMLPrediction() {
+    const generation = generationRef.current
     setPredicting(true)
     try {
-      setMLPrediction(await api.predictMLRisk(ML_PREDICT_HORIZON_MINUTES))
+      const prediction = await api.predictMLRisk(ML_PREDICT_HORIZON_MINUTES)
+      if (generation !== generationRef.current) return
+      setMLPrediction(prediction)
       setError(null)
     } catch (caught) {
+      if (generation !== generationRef.current) return
       setError(caught instanceof Error ? caught.message : 'ML 预测失败')
     } finally {
-      setPredicting(false)
+      if (generation === generationRef.current) setPredicting(false)
     }
   }
 
   async function requestRecommendation() {
+    const generation = generationRef.current
     setBusy(true)
     try {
-      setRecommend(await api.getMLRecommend())
+      const recommendation = await api.getMLRecommend()
+      if (generation !== generationRef.current) return
+      setRecommend(recommendation)
     } catch (caught) {
+      if (generation !== generationRef.current) return
       setError(caught instanceof Error ? caught.message : '模型推荐失败')
     } finally {
-      setBusy(false)
+      if (generation === generationRef.current) setBusy(false)
     }
   }
 

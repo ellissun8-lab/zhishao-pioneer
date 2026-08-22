@@ -54,6 +54,7 @@ class RealCVProvider(CVEventProvider):
         self.model_path = Path(model_path)
         self.conf_threshold = conf_threshold
         self.model_version = model_version_from_metrics()
+        self._inference_lock = threading.Lock()
         # 真实加载训练产物；失败由调用方捕获并进入显式 mock fallback
         self.model = YOLO(str(self.model_path))
 
@@ -65,9 +66,12 @@ class RealCVProvider(CVEventProvider):
         """CVEventProvider 接口兼容方法（单事件语义）；真实推理入口是 detect_image。"""
         raise NotImplementedError("RealCVProvider 走 detect_image(image) 真实推理路径")
 
-    def detect_image(self, image) -> list[Detection]:
+    def detect_image(self, image, conf_threshold: float | None = None) -> list[Detection]:
         """真实调用 YOLO.predict；Detection 全部来自 results.boxes，禁止任何预设值。"""
-        results = self.model.predict(source=image, conf=self.conf_threshold, verbose=False)
+        effective_threshold = self.conf_threshold if conf_threshold is None else conf_threshold
+        # Ultralytics model 是跨请求共享的重量级实例；串行化 predict，避免内部可变状态并发竞争。
+        with self._inference_lock:
+            results = self.model.predict(source=image, conf=effective_threshold, verbose=False)
         return self._parse_results(results)
 
     def _parse_results(self, results) -> list[Detection]:
@@ -258,3 +262,10 @@ def record_last_detection_summary(summary: dict[str, object]) -> None:
 def get_last_detection_summary() -> dict[str, object] | None:
     with _lock:
         return _last_detection_summary
+
+
+def clear_last_detection_summary() -> None:
+    """清除最近推理摘要；World Reset 后禁止 Agent 引用重置前画面。"""
+    global _last_detection_summary
+    with _lock:
+        _last_detection_summary = None

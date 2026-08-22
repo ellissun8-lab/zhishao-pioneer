@@ -13,11 +13,14 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
 import pytest
 from fastapi.testclient import TestClient
+from PIL import Image
 
 from backend.app.llm.agent import explain_question
 from backend.app.llm.tools import AgentTools
@@ -99,6 +102,7 @@ def make_provider(boxes_spec: list[tuple[int, float, tuple[float, float, float, 
     provider.model_path = MODEL_PATH
     provider.conf_threshold = 0.25
     provider.model_version = "cv_yolo_test"
+    provider._inference_lock = threading.Lock()
     provider.model = FakeYOLO()
     set_fake_results(provider.model, boxes_spec, orig_shape)
     return provider
@@ -487,6 +491,67 @@ def test_real_mode_never_calls_mock_provider(monkeypatch):
         assert payload["risk_state"] is not None
     finally:
         detect_spy.undo()
+
+
+def test_request_conf_threshold_does_not_pollute_singleton_provider(monkeypatch):
+    """单次请求的 conf 必须是 request-scoped，后续请求恢复 provider 默认阈值。"""
+    import backend.app.api.perception as perception_api
+
+    provider = make_provider([(0, 0.9, (100, 100, 150, 300))])
+    monkeypatch.setattr(perception_api, "get_real_provider", lambda: provider)
+
+    first = client.post(
+        "/api/perception/cv/detect-image",
+        data={
+            "demo_scene_id": "demo_normal",
+            "provider": "real",
+            "subject_ids": "agent_A",
+            "conf": "0.80",
+        },
+    )
+    second = client.post(
+        "/api/perception/cv/detect-image",
+        data={
+            "demo_scene_id": "demo_normal",
+            "provider": "real",
+            "subject_ids": "agent_A",
+        },
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert [call["conf"] for call in provider.model.predict_calls] == [0.80, real_cv.DEFAULT_CONF_THRESHOLD]
+    assert first.json()["conf_threshold"] == 0.80
+    assert second.json()["conf_threshold"] == real_cv.DEFAULT_CONF_THRESHOLD
+    assert provider.conf_threshold == real_cv.DEFAULT_CONF_THRESHOLD
+
+
+def test_concurrent_detection_thresholds_remain_request_scoped():
+    """并发 A=.2/B=.8 必须把各自阈值传给 YOLO，且不改 singleton 默认值。"""
+    provider = make_provider([(0, 0.9, (100, 100, 150, 300))])
+    image = Image.new("RGB", (640, 480), "white")
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [
+            executor.submit(provider.detect_image, image, 0.2),
+            executor.submit(provider.detect_image, image, 0.8),
+        ]
+        for future in futures:
+            assert future.result()
+
+    assert sorted(call["conf"] for call in provider.model.predict_calls) == [0.2, 0.8]
+    assert provider.conf_threshold == real_cv.DEFAULT_CONF_THRESHOLD
+
+
+@pytest.mark.parametrize("conf", [0, 0.01, 0.99, 2])
+def test_invalid_conf_is_rejected_before_provider_fallback(conf):
+    """非法阈值不能因 mock/fallback 路径而绕过 API 校验。"""
+    response = client.post(
+        "/api/perception/cv/detect-image",
+        data={"demo_scene_id": "demo_normal", "provider": "mock", "conf": str(conf)},
+    )
+
+    assert 400 <= response.status_code < 500
 
 
 def test_cv_model_metadata():

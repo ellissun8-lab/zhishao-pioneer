@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react'
+import { FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import type { ChatMessage, LLMStatus } from '../types'
 import { api } from '../api/client'
 
@@ -19,15 +19,30 @@ export function ChatPanel({ messages, busy, onSend }: Props) {
   const [input, setInput] = useState('')
   const [llmStatus, setLlmStatus] = useState<LLMStatus | null>(null)
   const [statusFailed, setStatusFailed] = useState(false)
+  const [statusRefreshing, setStatusRefreshing] = useState(false)
+  const statusRequestRef = useRef(0)
+
+  const refreshStatus = useCallback(async () => {
+    const requestId = ++statusRequestRef.current
+    setStatusRefreshing(true)
+    try {
+      const status = await api.getLLMStatus()
+      if (requestId !== statusRequestRef.current) return
+      setLlmStatus(status)
+      setStatusFailed(false)
+    } catch {
+      if (requestId !== statusRequestRef.current) return
+      setLlmStatus(null)
+      setStatusFailed(true)
+    } finally {
+      if (requestId === statusRequestRef.current) setStatusRefreshing(false)
+    }
+  }, [])
 
   useEffect(() => {
-    let cancelled = false
-    api
-      .getLLMStatus()
-      .then((status) => { if (!cancelled) setLlmStatus(status) })
-      .catch(() => { if (!cancelled) setStatusFailed(true) })
-    return () => { cancelled = true }
-  }, [])
+    void refreshStatus()
+    return () => { statusRequestRef.current += 1 }
+  }, [refreshStatus])
 
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -50,6 +65,15 @@ export function ChatPanel({ messages, busy, onSend }: Props) {
           <span className="llm-status-name">LLM Agent</span>
           <span className="llm-status-meta">Qwen3.8-Max · Alibaba Cloud Model Studio</span>
           <span className={badge.className} data-testid="llm-status-badge">{badge.text}</span>
+          <button
+            type="button"
+            className="llm-status-refresh"
+            aria-label="刷新 Qwen 状态"
+            onClick={() => void refreshStatus()}
+            disabled={statusRefreshing}
+          >
+            {statusRefreshing ? '刷新中…' : '刷新'}
+          </button>
         </div>
         {llmStatus && (
           <div className="llm-status-grid">

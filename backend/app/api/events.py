@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from ..database import query_events
 from ..ontology.models import Event
@@ -19,5 +19,8 @@ def audit_events(limit: int = Query(50, ge=1, le=500)):
 
 @router.post("", status_code=201)
 def create_event(event: Event):
-    state = world_service.publish(event)
+    try:
+        state = world_service.publish(event)
+    except ValueError as error:
+        raise HTTPException(400, str(error)) from error
     return {"event": event, "risk_state": state.risk_state}

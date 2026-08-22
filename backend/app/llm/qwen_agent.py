@@ -33,6 +33,60 @@ SYSTEM_PROMPT = f"""你是“智哨先锋”城市行为智能推演 Agent（推
 6. 用中文回答，简洁但信息完整，引用具体数值时保留一位小数或百分比。"""
 
 
+def _verified_grounded_answer(answer: str, tool_results: dict[str, Any]) -> str:
+    """对数值敏感回答使用本轮 tool result 做最终格式化，杜绝模型二次演绎数字。"""
+    cv_result = tool_results.get("get_cv_detection_summary")
+    if isinstance(cv_result, dict):
+        if not cv_result.get("available"):
+            return "当前 CV 工具记录不可用，记录不支持任何视觉检测结论。"
+        labels = cv_result.get("labels") or []
+        confidences = cv_result.get("confidences") or []
+        detections = "、".join(
+            f"{label} {float(confidence):.0%}"
+            for label, confidence in zip(labels, confidences, strict=False)
+        ) or "无 Detection"
+        return (
+            f"CV 工具事实：provider={cv_result.get('provider')}，"
+            f"model_invoked={str(bool(cv_result.get('model_invoked'))).lower()}，"
+            f"detection_count={cv_result.get('detection_count')}，detections={detections}。"
+            "以上仅来自 get_cv_detection_summary 的 Synthetic Visual Data 记录。"
+        )
+
+    prediction = tool_results.get("ml_predict_risk")
+    if isinstance(prediction, dict):
+        horizon = int(prediction.get("horizon_minutes") or 10)
+        model = prediction.get("model_type") or prediction.get("model")
+        fallback = bool(prediction.get("fallback"))
+        source = "透明规则回退" if fallback else "训练模型"
+        mae = prediction.get("test_mae")
+        mae_text = f"，Test MAE={float(mae):.4f}" if mae is not None else ""
+        return (
+            f"{source}（{model}）预测未来 {horizon} 分钟风险为 "
+            f"{float(prediction['prediction']):.1f}{mae_text}。"
+            "该数字来自 ml_predict_risk 工具结果，基于 Synthetic Data，仅用于模型验证。"
+        )
+
+    recommendation = tool_results.get("ml_recommend_strategy")
+    comparison = tool_results.get("compare_strategies")
+    if isinstance(recommendation, dict) and isinstance(comparison, dict):
+        strategy = str(recommendation.get("strategy"))
+        probabilities = recommendation.get("probabilities") or {}
+        probability = probabilities.get(strategy)
+        probability_text = f"{float(probability):.1%}" if probability is not None else "不可用（规则回退）"
+        simulations = comparison.get("results") or []
+        simulation_text = "、".join(
+            f"{item.get('strategy')}={float((item.get('after') or {}).get('risk')):.1f}"
+            for item in simulations
+        )
+        return (
+            f"Model Recommendation：{strategy}，predict_proba 模型概率={probability_text}；"
+            f"What-if Verification（10 分钟后风险）：{simulation_text}。"
+            "模型概率不代表现实处置成功率；以上数字仅来自本轮工具结果与 Synthetic Data。"
+        )
+
+    return answer
+
+
 class QwenUnavailableError(RuntimeError):
     """Qwen3.8-Max 不可用（Key 缺失 / 模型名非法 / API 失败），调用方走确定性回退。"""
 
@@ -52,6 +106,7 @@ def run_qwen_agent(question: str, state: WorldState) -> dict[str, Any]:
     tool_rounds = 0
     request_id: str | None = None
     answer = ""
+    last_tool_results: dict[str, Any] = {}
     started = time.perf_counter()
 
     try:
@@ -81,6 +136,7 @@ def run_qwen_agent(question: str, state: WorldState) -> dict[str, Any]:
             )
             for call in tool_calls:
                 result = execute_tool(agent_tools, call["name"], call["arguments"])
+                last_tool_results[call["name"]] = result
                 messages.append(
                     {
                         "role": "tool",
@@ -97,6 +153,8 @@ def run_qwen_agent(question: str, state: WorldState) -> dict[str, Any]:
             answer = response.get("content") or "（已达工具调用上限，且模型未给出最终回答）"
     except QwenAPIError as error:
         raise QwenUnavailableError(error.reason) from error
+
+    answer = _verified_grounded_answer(answer, last_tool_results)
 
     return {
         "answer": answer,

@@ -62,9 +62,9 @@ class DetectionRequest(BaseModel):
 def mock_detection(request: DetectionRequest):
     try:
         event = MockCVProvider().detect(request.detection, request.subject_id)
+        state = world_service.publish(event)
     except ValueError as error:
         raise HTTPException(400, str(error)) from error
-    state = world_service.publish(event)
     return {"event": event, "risk_state": state.risk_state}
 
 
@@ -178,6 +178,10 @@ async def cv_detect_image(
 ) -> dict[str, object]:
     """Trained CV 推理：uploaded/generated image -> RealCVProvider -> YOLO.predict -> Detection/Event。"""
     requested = (provider or _provider_preference()).strip().lower()
+    if requested not in {"mock", "real"}:
+        raise HTTPException(400, "provider must be either mock or real")
+    if conf is not None and not 0.05 <= conf <= 0.95:
+        raise HTTPException(400, "conf must be within [0.05, 0.95]")
     subjects = [item.strip() for item in (subject_ids or "").split(",") if item.strip()] or list(DEFAULT_SCENE_SUBJECTS)
     missing = [subject for subject in set(subjects) if subject not in world_service.state.agents]
     if missing:
@@ -199,10 +203,7 @@ async def cv_detect_image(
     if model_provider is None:
         return _fallback_response(demo_scene_id, subjects, provider_unavailable_reason() or "model file missing")
 
-    if conf is not None:
-        if not 0.05 <= conf <= 0.95:
-            raise HTTPException(400, "conf must be within [0.05, 0.95]")
-        model_provider.conf_threshold = conf
+    effective_conf = model_provider.conf_threshold if conf is None else conf
 
     try:
         image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
@@ -211,7 +212,7 @@ async def cv_detect_image(
 
     started = time.perf_counter()
     # YOLO 推理放线程池，避免阻塞事件循环
-    detections = await run_in_threadpool(model_provider.detect_image, image)
+    detections = await run_in_threadpool(model_provider.detect_image, image, effective_conf)
     latency_ms = round((time.perf_counter() - started) * 1000, 1)
 
     events = model_provider.detections_to_events(detections, subjects, scene_id=scene_label)
@@ -241,7 +242,7 @@ async def cv_detect_image(
         "model_version": model_provider.model_version,
         "synthetic_visual_data": True,
         "scene_id": demo_scene_id,
-        "conf_threshold": model_provider.conf_threshold,
+        "conf_threshold": effective_conf,
         "latency_ms": latency_ms,
         "detections": detections,
         "events": events,

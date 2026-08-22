@@ -289,6 +289,25 @@ def test_qwen_policy_multi_tool_grounding(monkeypatch: pytest.MonkeyPatch):
         assert f"{simulation.after.risk:.1f}" in result["answer"]
 
 
+def test_qwen_policy_final_answer_discards_model_invented_numbers(monkeypatch: pytest.MonkeyPatch):
+    """第二次 Qwen 回答若引入工具中不存在的数值，最终输出必须由 tool results 重建。"""
+    _configure(
+        monkeypatch,
+        [
+            tool_call_response("call_rec", "ml_recommend_strategy", {}),
+            tool_call_response("call_cmp", "compare_strategies", {"horizon_minutes": 10}),
+            text_response("模型建议 intervene，推演后风险 12345.6，现实成功率 100%。", "req-hallucinated"),
+        ],
+    )
+
+    result = client.post("/api/chat", json={"message": "现在模型建议采取什么措施？"}).json()
+
+    assert "12345.6" not in result["answer"]
+    assert "Model Recommendation" in result["answer"]
+    assert "What-if Verification" in result["answer"]
+    assert "不代表现实处置成功率" in result["answer"]
+
+
 def _cv_final(kwargs: dict) -> FakeResponse:
     summary = _last_tool_json(kwargs["messages"])
     if not summary.get("available"):
@@ -326,8 +345,37 @@ def test_qwen_cv_summary_grounding(monkeypatch: pytest.MonkeyPatch):
     result = client.post("/api/chat", json={"message": "视觉模型检测到了什么？"}).json()
 
     assert result["tools_used"] == ["get_cv_detection_summary"]
-    assert "provider=real" in result["answer"] and "model_invoked=True" in result["answer"]
+    assert "provider=real" in result["answer"] and "model_invoked=true" in result["answer"]
     assert "person 99%" in result["answer"] and "risk_object 87%" in result["answer"]
+
+
+def test_qwen_cv_answer_always_exposes_tool_provenance(monkeypatch: pytest.MonkeyPatch):
+    """即使模型省略来源字段，最终回答也必须从工具结果补齐 provider/model_invoked/检测值。"""
+    real_cv.record_last_detection_summary(
+        {
+            "provider": "real",
+            "model_invoked": True,
+            "model_version": "cv_yolo_test",
+            "scene_id": "demo_high_risk",
+            "detection_count": 2,
+            "labels": ["person", "risk_object"],
+            "confidences": [0.73, 0.61],
+        }
+    )
+    _configure(
+        monkeypatch,
+        [
+            tool_call_response("call_cv", "get_cv_detection_summary", {}),
+            text_response("检测到人员和疑似风险物品。", "req-cv-short"),
+        ],
+    )
+
+    result = client.post("/api/chat", json={"message": "视觉模型检测到了什么？"}).json()
+
+    assert "provider=real" in result["answer"]
+    assert "model_invoked=true" in result["answer"]
+    assert "detection_count=2" in result["answer"]
+    assert "person 73%" in result["answer"] and "risk_object 61%" in result["answer"]
 
 
 def test_qwen_no_risk_hallucination(monkeypatch: pytest.MonkeyPatch):
@@ -406,6 +454,32 @@ def test_qwen_vision_structured_output(monkeypatch: pytest.MonkeyPatch):
     assert data_url.startswith("data:image/jpeg;base64,")
     payload = data_url.split(",", 1)[1]
     assert len(payload) > 1000, "发送的必须是真实合成 demo 图"
+
+
+def test_qwen_vision_invalid_scene_returns_4xx():
+    response = client.post("/api/llm/vision/analyze", json={"demo_scene_id": "not-a-scene"})
+    assert 400 <= response.status_code < 500
+
+
+def test_qwen_vision_malformed_scalar_values_are_safely_coerced(monkeypatch: pytest.MonkeyPatch):
+    vision_json = json.dumps(
+        {
+            "estimated_people": "unknown",
+            "vehicle_visible": "false",
+            "possible_risk_object": "true",
+            "crowd_semantics": None,
+            "summary": None,
+        }
+    )
+    _configure(monkeypatch, [text_response(vision_json, "req-coerce")])
+
+    response = client.post("/api/llm/vision/analyze", json={"demo_scene_id": "demo_high_risk"})
+
+    assert response.status_code == 200
+    structured = response.json()["structured"]
+    assert structured["estimated_people"] == 0
+    assert structured["vehicle_visible"] is False
+    assert structured["possible_risk_object"] is True
 
 
 # ---------- Fallback ----------

@@ -109,12 +109,16 @@ export function CVDetectionPanel({ agents, resetVersion, onComplete }: Props) {
 
   const subjects = useMemo(() => agents.slice(0, 3), [agents])
   const preview = SCENE_PREVIEW[sceneId] ?? []
-  const busy = (mode === 'mock' && phase !== 'idle' && phase !== 'done') || (mode === 'trained' && trainedPhase === 'running')
+  const busy = (mode === 'mock' && phase !== 'idle' && phase !== 'done')
+    || (mode === 'trained' && trainedPhase === 'running')
+    || visionPhase === 'running'
 
   useEffect(() => {
+    let cancelled = false
     void api.getCVStatus()
-      .then(setCvStatus)
-      .catch(() => setCvStatus(null))
+      .then((status) => { if (!cancelled) setCvStatus(status) })
+      .catch(() => { if (!cancelled) setCvStatus(null) })
+    return () => { cancelled = true }
   }, [])
 
   useEffect(() => {
@@ -190,6 +194,7 @@ export function CVDetectionPanel({ agents, resetVersion, onComplete }: Props) {
 
   function switchDemoScene(nextId: string) {
     if (busy || nextId === demoSceneId) return
+    generationRef.current += 1
     trainedAbortRef.current?.abort()
     trainedAbortRef.current = null
     setDemoSceneId(nextId)
@@ -250,6 +255,7 @@ export function CVDetectionPanel({ agents, resetVersion, onComplete }: Props) {
   // 前端只渲染响应中的 detections（置信度/边界框全部来自模型输出，禁止伪造）
   function runTrainedDetection() {
     if (trainedPhase === 'running') return
+    const generation = generationRef.current
     const controller = new AbortController()
     trainedAbortRef.current = controller
     setTrainedPhase('running')
@@ -258,14 +264,18 @@ export function CVDetectionPanel({ agents, resetVersion, onComplete }: Props) {
     void (async () => {
       try {
         const response = await api.cvDetectTrained(demoSceneId, subjects.map((agent) => agent.id), controller.signal)
+        if (generation !== generationRef.current) return
         setTrainedResult(response)
         setTrainedPhase('done')
         onComplete(response)
       } catch (caught) {
+        if (generation !== generationRef.current) return
         setTrainedError(caught instanceof Error ? caught.message : '训练模型推理请求失败')
         setTrainedPhase('idle')
       } finally {
-        trainedAbortRef.current = null
+        if (generation === generationRef.current && trainedAbortRef.current === controller) {
+          trainedAbortRef.current = null
+        }
       }
     })()
   }
@@ -273,15 +283,18 @@ export function CVDetectionPanel({ agents, resetVersion, onComplete }: Props) {
   // Qwen3.8-Max Vision：语义理解（与 YOLO 检测严格分工，不产出 bbox/检测置信度）
   function runQwenVision() {
     if (visionPhase === 'running') return
+    const generation = generationRef.current
     setVisionPhase('running')
     setVisionResult(null)
     setVisionError('')
     void (async () => {
       try {
         const response = await api.visionAnalyze(demoSceneId)
+        if (generation !== generationRef.current) return
         setVisionResult(response)
         setVisionPhase('idle')
       } catch (caught) {
+        if (generation !== generationRef.current) return
         setVisionError(caught instanceof Error ? caught.message : 'Qwen 视觉理解请求失败')
         setVisionPhase('idle')
       }

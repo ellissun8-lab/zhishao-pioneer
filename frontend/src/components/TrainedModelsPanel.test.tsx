@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { TrainedModelsPanel } from './TrainedModelsPanel'
 import { api } from '../api/client'
 import type { MLRecommend, MLRiskPrediction, MLStatus } from '../types'
@@ -154,5 +154,36 @@ describe('TrainedModelsPanel', () => {
     render(<TrainedModelsPanel />)
     expect(await screen.findByText('backend offline')).toBeTruthy()
     expect(screen.queryByText(/120,000/)).toBeNull()
+  })
+
+  it('clears prediction and recommendation results when the demo is reset', async () => {
+    vi.mocked(api.getMLStatus).mockResolvedValue(loadedStatus)
+    vi.mocked(api.predictMLRisk).mockResolvedValue(mlPrediction)
+    vi.mocked(api.getMLRecommend).mockResolvedValue(recommend)
+    const view = render(<TrainedModelsPanel resetVersion={0} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'ML预测未来10分钟' }))
+    expect(await screen.findByText('未来10分钟：79.4')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '模型推荐 + What-if 验证' }))
+    expect(await screen.findByText(/推荐策略/)).toBeTruthy()
+
+    view.rerender(<TrainedModelsPanel resetVersion={1} />)
+
+    expect(screen.queryByText('未来10分钟：79.4')).toBeNull()
+    expect(screen.queryByText(/推荐策略/)).toBeNull()
+  })
+
+  it('ignores a stale ML prediction that resolves after reset', async () => {
+    vi.mocked(api.getMLStatus).mockResolvedValue(loadedStatus)
+    let resolvePrediction!: (value: MLRiskPrediction) => void
+    vi.mocked(api.predictMLRisk).mockReturnValue(new Promise((resolve) => { resolvePrediction = resolve }))
+    const view = render(<TrainedModelsPanel resetVersion={0} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'ML预测未来10分钟' }))
+
+    view.rerender(<TrainedModelsPanel resetVersion={1} />)
+    await waitFor(() => expect(api.getMLStatus).toHaveBeenCalledTimes(2))
+    await act(async () => { resolvePrediction(mlPrediction) })
+
+    expect(screen.queryByText('未来10分钟：79.4')).toBeNull()
   })
 })

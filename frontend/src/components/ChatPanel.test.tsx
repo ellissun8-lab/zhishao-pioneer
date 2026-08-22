@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { ChatPanel } from './ChatPanel'
 import { api } from '../api/client'
 import type { ChatMessage, LLMStatus } from '../types'
@@ -65,6 +65,18 @@ describe('ChatPanel Qwen 状态区', () => {
     render(<ChatPanel messages={[]} busy={false} onSend={vi.fn()} />)
 
     await waitFor(() => expect(screen.getByTestId('llm-status-badge').textContent ?? '').toContain('FALLBACK'))
+  })
+
+  it('支持手动刷新陈旧状态：Offline 恢复 Online 后更新 CONNECTED', async () => {
+    vi.mocked(api.getLLMStatus)
+      .mockResolvedValueOnce(fallbackStatus)
+      .mockResolvedValueOnce(connectedStatus)
+    render(<ChatPanel messages={[]} busy={false} onSend={vi.fn()} />)
+
+    await waitFor(() => expect(screen.getByTestId('llm-status-badge').textContent ?? '').toContain('FALLBACK'))
+    fireEvent.click(screen.getByRole('button', { name: '刷新 Qwen 状态' }))
+    await waitFor(() => expect(screen.getByTestId('llm-status-badge').textContent ?? '').toContain('CONNECTED'))
+    expect(api.getLLMStatus).toHaveBeenCalledTimes(2)
   })
 })
 

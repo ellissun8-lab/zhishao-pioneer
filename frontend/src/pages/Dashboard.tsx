@@ -197,10 +197,10 @@ export default function Dashboard() {
           <RiskPanel risk={world.risk_state} />
           <WorldStatePanel world={world} selectedAgent={selectedAgent} selectedZone={selectedZone} />
           <section className="panel chart-panel"><div className="panel-heading"><span>风险演化</span><em>RULE ENGINE</em></div><RiskChart values={world.risk_state.history} /></section>
-          <PredictionPanel currentRisk={world.risk_state.overall_score} />
+          <PredictionPanel currentRisk={world.risk_state.overall_score} resetVersion={resetVersion} />
         </div>
         <div className="right-column">
-          <TrainedModelsPanel />
+          <TrainedModelsPanel resetVersion={resetVersion} />
           <CVDetectionPanel agents={agents} resetVersion={resetVersion} onComplete={handleCVDetection} />
           <SimulationPanel results={results} selected={strategy} busy={busy} onRun={runStrategy} onCompare={compareAll} />
           <ChatPanel messages={messages} busy={busy} onSend={sendMessage} />

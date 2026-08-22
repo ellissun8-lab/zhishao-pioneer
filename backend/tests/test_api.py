@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 
 from backend.app.main import app
+from backend.app.perception import real_cv
 from backend.app.service import world_service
 
 client = TestClient(app)
@@ -50,6 +51,69 @@ def test_reset_with_seed_is_deterministic():
         return client.get("/api/world/state").json()["agents"]["agent_D"]["position"]
 
     assert snapshot() == snapshot()
+
+
+def test_reset_clears_last_cv_inference_summary():
+    real_cv.record_last_detection_summary({"provider": "real", "model_invoked": True})
+    assert real_cv.get_last_detection_summary() is not None
+
+    response = client.post("/api/world/reset")
+
+    assert response.status_code == 200
+    assert real_cv.get_last_detection_summary() is None
+
+
+def test_invalid_prediction_and_simulation_horizons_return_4xx():
+    for horizon in (0, 11, 999):
+        assert 400 <= client.get(f"/api/world/predict?horizon_minutes={horizon}").status_code < 500
+        assert 400 <= client.get(f"/api/simulation/compare?horizon_minutes={horizon}").status_code < 500
+        assert 400 <= client.post(
+            "/api/simulation/run",
+            json={"strategy": "none", "horizon_minutes": horizon},
+        ).status_code < 500
+
+
+def test_valid_query_horizons_are_parsed_from_http_strings():
+    """FastAPI query 参数来自字符串；合法 5/10/30 必须可被前端正常调用。"""
+    for horizon in (5, 10, 30):
+        assert client.get(f"/api/world/predict?horizon_minutes={horizon}").status_code == 200
+        assert client.get(f"/api/simulation/compare?horizon_minutes={horizon}").status_code == 200
+
+
+def test_blank_chat_and_invalid_agent_limit_return_4xx():
+    assert 400 <= client.post("/api/chat", json={"message": "   "}).status_code < 500
+    assert 400 <= client.get("/api/agents?limit=-1").status_code < 500
+
+
+def test_event_and_mock_cv_reject_unknown_subject_ids():
+    event = client.post(
+        "/api/events",
+        json={"type": "RiskObjectDetected", "subject_id": "missing_agent"},
+    )
+    mock = client.post(
+        "/api/perception/mock",
+        json={"detection": "person", "subject_id": "missing_agent"},
+    )
+    assert 400 <= event.status_code < 500
+    assert 400 <= mock.status_code < 500
+
+
+def test_duplicate_event_id_is_idempotent_and_does_not_double_risk():
+    payload = {
+        "id": "event_retry_same_id",
+        "type": "RiskObjectDetected",
+        "subject_id": "agent_A",
+        "confidence": 1,
+    }
+    first = client.post("/api/events", json=payload)
+    first_risk = first.json()["risk_state"]["overall_score"]
+    second = client.post("/api/events", json=payload)
+    second_risk = second.json()["risk_state"]["overall_score"]
+    matching = [event for event in client.get("/api/events").json() if event["id"] == payload["id"]]
+
+    assert first.status_code == 201 and second.status_code == 201
+    assert len(matching) == 1
+    assert second_risk == first_risk
 
 
 def test_vehicle_detection_increases_risk():

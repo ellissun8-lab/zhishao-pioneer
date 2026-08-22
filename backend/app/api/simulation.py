@@ -1,4 +1,6 @@
-from fastapi import APIRouter
+from typing import Literal
+
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from ..service import world_service
@@ -10,7 +12,7 @@ router = APIRouter(prefix="/simulation", tags=["simulation"])
 
 class SimulationRequest(BaseModel):
     strategy: Strategy
-    horizon_minutes: int = 10
+    horizon_minutes: Literal[5, 10, 30] = 10
 
 
 @router.post("/run")
@@ -19,6 +21,8 @@ def run_simulation(request: SimulationRequest):
 
 
 @router.get("/compare")
-def compare_strategies(horizon_minutes: int = 10):
+def compare_strategies(horizon_minutes: int = Query(default=10)):
+    if horizon_minutes not in {5, 10, 30}:
+        raise HTTPException(400, "horizon_minutes must be one of 5, 10, 30")
     return SimulationEngine().compare(world_service.state, horizon_minutes)
 

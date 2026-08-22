@@ -369,6 +369,20 @@ describe('CVDetectionPanel · Trained CV mode', () => {
     expect(screen.queryByTestId('cv-provider-badge')).toBeNull()
     expect(onComplete).not.toHaveBeenCalled()
   })
+
+  it('ignores a stale trained-CV response that resolves after reset', async () => {
+    let resolveRequest!: (value: CVTrainedResult) => void
+    vi.mocked(api.cvDetectTrained).mockReturnValue(new Promise((resolve) => { resolveRequest = resolve }))
+    const { rerender } = renderPanel()
+    fireEvent.click(screen.getByTestId('cv-mode-trained'))
+    fireEvent.click(screen.getByTestId('cv-run-trained'))
+
+    rerender(<CVDetectionPanel agents={agents} resetVersion={1} onComplete={onComplete} />)
+    await act(async () => { resolveRequest(trainedResult) })
+
+    expect(screen.queryByTestId('cv-provider-badge')).toBeNull()
+    expect(onComplete).not.toHaveBeenCalled()
+  })
 })
 
 describe('CVDetectionPanel · Qwen Vision（语义理解）', () => {
@@ -441,6 +455,19 @@ describe('CVDetectionPanel · Qwen Vision（语义理解）', () => {
     expect(screen.getByTestId('cv-qwen-vision-result')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: '人员聚集' }))
+    expect(screen.queryByTestId('cv-qwen-vision-result')).toBeNull()
+  })
+
+  it('ignores a stale Qwen Vision response that resolves after reset', async () => {
+    let resolveRequest!: (value: typeof visionResult) => void
+    vi.mocked(api.visionAnalyze).mockReturnValue(new Promise((resolve) => { resolveRequest = resolve }))
+    const { rerender } = renderPanel()
+    fireEvent.click(screen.getByTestId('cv-mode-trained'))
+    fireEvent.click(screen.getByTestId('cv-run-qwen-vision'))
+
+    rerender(<CVDetectionPanel agents={agents} resetVersion={1} onComplete={onComplete} />)
+    await act(async () => { resolveRequest(visionResult) })
+
     expect(screen.queryByTestId('cv-qwen-vision-result')).toBeNull()
   })
 })
